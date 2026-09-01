@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-app-version="parcelas-1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -364,6 +364,24 @@
         overflow-wrap: anywhere;
       }
     }
+
+    /* Parcelas */
+    .debt { grid-template-columns: minmax(0, 1fr); }
+    .debt-name, .debt-value { overflow-wrap: anywhere; }
+    .debt-meta { color:var(--soft); font-size:14px; line-height:1.5; margin-top:8px; }
+    .debt-actions { display:flex; flex-wrap:wrap; gap:10px; }
+    .debt-actions button { flex:1; min-width:0; min-height:48px; }
+    .installment-list { border-top:1px solid var(--line); padding-top:12px; }
+    .installment-list summary { cursor:pointer; min-height:44px; font-weight:650; }
+    .installment-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
+    .installment-row span { min-width:0; overflow-wrap:anywhere; font-size:14px; line-height:1.5; }
+    .installment-row button { flex-shrink:0; min-height:44px; padding:8px 12px; border-radius:12px; background:#f7f9fc; color:#081322; font-size:14px; font-weight:700; }
+    .installment-row.is-paid button { background:#173d3c; color:#b9f0d4; }
+    .installment-row.is-paid span { color:var(--ok); }
+    .installment-preview { font-size:14px; line-height:1.5; color:var(--ok); }
+    .modal { max-height:85dvh; overflow:auto; }
+    .modal-wrap { overflow:auto; }
+    [hidden] { display:none !important; }
   </style>
 </head>
 <body>
@@ -374,7 +392,7 @@
     </div>
 
     <h1>Empréstimos</h1>
-    <p class="subtitle">O total diminui imediatamente ao tocar em <strong>“OK / Quitar”</strong>. Você também pode <strong>adicionar novas dívidas</strong> a qualquer momento.</p>
+    <p class="subtitle">Organize suas dívidas e parcelas. O saldo diminui a cada pagamento.</p>
 
     <section class="panel">
       <div class="eyebrow">Valor total da dívida</div>
@@ -388,7 +406,7 @@
 
     <div class="head">
       <h2>Suas dívidas</h2>
-      <small>Toque para quitar</small>
+      <small>À vista ou parcelado</small>
     </div>
 
     <div class="controls">
@@ -399,9 +417,7 @@
 
     <section class="list" id="debtList"></section>
 
-    <div class="info">
-      <strong>Exemplo:</strong> ao tocar em <strong>OK / Quitar</strong> no Monk (<strong>R$ 700,00</strong>), o total muda na hora de <strong>R$ 8.379,00</strong> para <strong>R$ 7.679,00</strong>. O progresso fica salvo no aparelho.
-    </div>
+    <div class="info">Toque em <strong>Parcelar</strong> para dividir uma dívida. Em <strong>Ver parcelas</strong>, marque os pagamentos individualmente. A divisão usa o valor total informado, sem acrescentar juros.</div>
 
     <div class="footer">Controle de dívidas • salvo no navegador do seu iPhone</div>
   </main>
@@ -409,7 +425,7 @@
   <div class="modal-wrap" id="modalWrap" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <h3 id="modalTitle">Adicionar nova dívida</h3>
-      <p>Inclua o nome e o valor. Ela entrará na lista na hora e o total será atualizado automaticamente.</p>
+      <p id="modalDescription">Informe o valor total e a quantidade de parcelas. Use 1 para pagamento à vista.</p>
 
       <div class="form-grid">
         <div class="field full">
@@ -417,11 +433,16 @@
           <input id="debtName" type="text" placeholder="Ex.: Banco X, Cartão Y..." />
         </div>
         <div class="field">
-          <label for="debtValue">Valor (R$)</label>
-          <input id="debtValue" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="0,00" />
+          <label for="debtValue">Valor total (R$)</label>
+          <input id="debtValue" type="text" inputmode="decimal" placeholder="0,00" />
         </div>
       </div>
 
+      <div class="field" style="margin-top:14px">
+        <label for="installmentCount">Quantidade de parcelas</label>
+        <input id="installmentCount" type="number" inputmode="numeric" min="1" max="360" step="1" value="1" />
+        <div id="installmentPreview" class="installment-preview" role="status" aria-live="polite"></div>
+      </div>
       <div class="modal-actions">
         <button class="outline-btn" type="button" id="cancelBtn">Cancelar</button>
         <button class="outline-btn primary-btn" type="button" id="saveBtn">Salvar dívida</button>
@@ -434,229 +455,244 @@
   <script>
     const STORAGE_KEY = "controle_emprestimos_plus_v1";
     const HISTORY_KEY = "controle_emprestimos_plus_history_v1";
-
     const seed = [{"id": "monk", "name": "Monk", "value": 700.0}, {"id": "greenword", "name": "Greenword", "value": 260.0}, {"id": "credja", "name": "Cred Já", "value": 300.0}, {"id": "tiffany", "name": "Tiffany Cob", "value": 780.0}, {"id": "alef", "name": "Alef", "value": 800.0}, {"id": "quantum1", "name": "Quantum 1", "value": 1350.0}, {"id": "greencreed", "name": "Green Creed", "value": 279.0}, {"id": "hiper05", "name": "Hiper 05 (possível desconto)", "value": 1050.0}, {"id": "jr", "name": "JR", "value": 300.0}, {"id": "jbcreditos", "name": "JB Créditos", "value": 700.0}, {"id": "sevengroup", "name": "Seven GROUP", "value": 560.0}, {"id": "emprestshopping", "name": "Emprest Shopping", "value": 1300.0}];
+    const $ = id => document.getElementById(id);
+    const debtList = $("debtList");
+    const modalWrap = $("modalWrap");
+    const debtName = $("debtName");
+    const debtValue = $("debtValue");
+    const installmentCount = $("installmentCount");
+    const toast = $("toast");
     let history = loadHistory();
     let state = loadState();
+    let editingId = null;
+    let returnFocus = null;
+    let toastTimer;
+    const expanded = new Set();
 
-    const debtList = document.getElementById("debtList");
-    const remainingTotal = document.getElementById("remainingTotal");
-    const initialTotal = document.getElementById("initialTotal");
-    const paidTotal = document.getElementById("paidTotal");
-    const openCount = document.getElementById("openCount");
-    const undoBtn = document.getElementById("undoBtn");
-    const restoreBtn = document.getElementById("restoreBtn");
-    const addBtn = document.getElementById("addBtn");
-    const toast = document.getElementById("toast");
-    const modalWrap = document.getElementById("modalWrap");
-    const debtName = document.getElementById("debtName");
-    const debtValue = document.getElementById("debtValue");
-    const cancelBtn = document.getElementById("cancelBtn");
-    const saveBtn = document.getElementById("saveBtn");
-
-    function brl(v) {
-      return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
+    function brl(v) { return new Intl.NumberFormat("pt-BR", {style:"currency", currency:"BRL"}).format(v); }
+    function money(cents) { return brl(cents / 100); }
+    function cents(value) { return Math.round(Number(value) * 100); }
+    function readValue(text) {
+      let value = String(text).trim().replace(/R\$|\s/g, "");
+      if (value.includes(",")) value = value.replace(/\./g, "").replace(",", ".");
+      return /^\d+(\.\d{1,2})?$/.test(value) ? cents(value) : NaN;
     }
-
+    function splitPayments(total, count, paid = false) {
+      if (!Number.isSafeInteger(total) || total < 1 || !Number.isInteger(count) || count < 1 || count > 360 || count > total) throw new Error("Parcelamento inválido");
+      const base = Math.floor(total / count), remainder = total % count;
+      return Array.from({length: count}, (_, index) => ({amount: base + (index < remainder ? 1 : 0), paid}));
+    }
     function normalizeState(list) {
       return list.map(item => {
-        const cleanValue = Number(item.value || 0);
-        return {
-          id: item.id || ("id_" + Math.random().toString(36).slice(2)),
-          name: item.name || "Dívida",
-          value: cleanValue,
-          paid: !!item.paid
-        };
+        const total = cents(item.value);
+        const valid = Array.isArray(item.installments) && item.installments.length > 0 &&
+          item.installments.every(p => Number.isSafeInteger(p.amount) && p.amount > 0) &&
+          item.installments.reduce((sum, p) => sum + p.amount, 0) === total;
+        const installments = valid ? item.installments.map(p => ({amount:p.amount, paid:!!p.paid})) : splitPayments(total, 1, !!item.paid);
+        return {...item, value:total / 100, installments, paid:installments.every(p => p.paid)};
       });
     }
-
     function loadState() {
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (Array.isArray(saved) && saved.length) return normalizeState(saved);
+        if (Array.isArray(saved)) return normalizeState(saved);
       } catch (e) {}
-      return seed.map(item => ({ ...item, paid:false }));
+      return normalizeState(seed.map(item => ({...item, paid:false})));
     }
-
     function loadHistory() {
-      try {
-        const saved = JSON.parse(localStorage.getItem(HISTORY_KEY));
-        return Array.isArray(saved) ? saved : [];
-      } catch (e) {
-        return [];
-      }
+      try { const saved = JSON.parse(localStorage.getItem(HISTORY_KEY)); return Array.isArray(saved) ? saved : []; }
+      catch (e) { return []; }
     }
-
     function saveAll() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      catch (e) { showToast("Não foi possível salvar. Mantenha esta página aberta e tente novamente."); return false; }
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
+      return true;
     }
-
+    function snapshot(item) {
+      history.push({type:"replace", id:item.id, previous:JSON.parse(JSON.stringify(item))});
+      if (history.length > 80) history.shift();
+    }
+    function totals(item) {
+      const total = item.installments.reduce((sum, p) => sum + p.amount, 0);
+      const paid = item.installments.filter(p => p.paid).reduce((sum, p) => sum + p.amount, 0);
+      return {total, paid, remaining:total-paid};
+    }
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+    function button(text, className, action, label) {
+      const node = element("button", className, text); node.type="button";
+      if (label) node.setAttribute("aria-label",label);
+      node.addEventListener("click", action); return node;
+    }
     function render() {
-      debtList.innerHTML = "";
+      debtList.replaceChildren();
       state.forEach(item => {
-        const note = item.name.toLowerCase().includes("possível desconto") || item.id === "hiper05";
-
-        const card = document.createElement("article");
-        card.className = "debt" + (item.paid ? " paid" : "");
-
-        const left = document.createElement("div");
-        const name = document.createElement("div");
-        name.className = "debt-name";
-        name.textContent = item.name;
-
-        const value = document.createElement("div");
-        value.className = "debt-value";
-        value.textContent = brl(item.value);
-
-        left.appendChild(name);
-        left.appendChild(value);
-
-        if (note) {
-          const noteEl = document.createElement("div");
-          noteEl.className = "debt-note";
-          noteEl.textContent = "Possível desconto";
-          left.appendChild(noteEl);
+        const amounts = totals(item);
+        const count = item.installments.length;
+        const paidCount = item.installments.filter(p => p.paid).length;
+        const card = element("article", "debt" + (item.paid ? " paid" : ""));
+        card.append(element("div", "debt-name", item.name));
+        card.append(element("div", "debt-value", money(item.paid ? amounts.total : amounts.remaining)));
+        const description = count > 1
+          ? `${paidCount} de ${count} parcelas pagas • Total: ${money(amounts.total)} • Pago: ${money(amounts.paid)}`
+          : (item.paid ? "Dívida quitada" : "Saldo em aberto");
+        card.append(element("div", "debt-meta", description));
+        if (item.name.toLowerCase().includes("possível desconto") || item.id === "hiper05") card.append(element("div", "debt-note", "Possível desconto"));
+        const actions = element("div", "debt-actions");
+        if (!item.paid) {
+          const next = item.installments.findIndex(p => !p.paid);
+          const pay = button(count > 1 ? `Pagar ${next+1}ª • ${money(item.installments[next].amount)}` : "OK / Quitar", "pay-btn", () => toggleInstallment(item.id, next), `Pagar parcela ${next+1} de ${item.name}`);
+          pay.id = "pay-" + item.id;
+          actions.append(pay);
+          if (paidCount === 0) actions.append(button(count > 1 ? "Alterar parcelas" : "Parcelar", "outline-btn", () => openModal(item.id)));
+        } else if (count === 1) {
+          const reopen = button("Reabrir", "pay-btn", () => toggleInstallment(item.id, 0));
+          reopen.id = "pay-" + item.id; actions.append(reopen);
         }
-
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "pay-btn";
-        btn.textContent = item.paid ? "Reabrir" : "OK / Quitar";
-        btn.addEventListener("click", () => toggleDebt(item.id));
-
-        card.appendChild(left);
-        card.appendChild(btn);
-        debtList.appendChild(card);
+        if (actions.children.length) card.append(actions);
+        if (count > 1) {
+          const details = element("details", "installment-list");
+          details.open = expanded.has(item.id);
+          details.addEventListener("toggle", () => { if (details.open) expanded.add(item.id); else expanded.delete(item.id); });
+          details.append(element("summary", "", "Ver parcelas"));
+          item.installments.forEach((p, index) => {
+            const row = element("div", "installment-row" + (p.paid ? " is-paid" : ""));
+            row.append(element("span", "", `${index+1}/${count} • ${money(p.amount)}${p.paid ? " • Paga" : " • Em aberto"}`));
+            const control = button(p.paid ? "Desmarcar" : "Marcar paga", "", () => toggleInstallment(item.id, index), `${p.paid ? "Desmarcar pagamento da" : "Pagar"} parcela ${index+1} de ${item.name}`);
+            control.id = `part-${item.id}-${index}`;
+            row.append(control); details.append(row);
+          });
+          card.append(details);
+        }
+        debtList.append(card);
       });
-
-      const total = state.reduce((s, item) => s + Number(item.value || 0), 0);
-      const paid = state.filter(item => item.paid).reduce((s, item) => s + Number(item.value || 0), 0);
-      const open = state.filter(item => !item.paid).length;
-
-      remainingTotal.textContent = brl(total - paid);
-      initialTotal.textContent = brl(total);
-      paidTotal.textContent = brl(paid);
-      openCount.textContent = String(open);
-      restoreBtn.textContent = "Restaurar " + brl(total).replace(",00","");
-      undoBtn.disabled = history.length === 0;
+      const all = state.map(totals);
+      const total = all.reduce((sum,t) => sum + t.total, 0);
+      const paid = all.reduce((sum,t) => sum + t.paid, 0);
+      $("remainingTotal").textContent = money(total-paid);
+      $("initialTotal").textContent = money(total);
+      $("paidTotal").textContent = money(paid);
+      $("openCount").textContent = String(state.filter(item => !item.paid).length);
+      $("restoreBtn").textContent = "Restaurar lista inicial";
+      $("undoBtn").disabled = history.length === 0;
     }
-
-    function toggleDebt(id) {
-      const idx = state.findIndex(item => item.id === id);
-      if (idx < 0) return;
-
-      history.push({ type:"toggle", id, previous: state[idx].paid });
-      if (history.length > 80) history.shift();
-
-      state[idx].paid = !state[idx].paid;
-      saveAll();
-      render();
-      showToast(state[idx].paid ? `${state[idx].name} quitado: -${brl(state[idx].value)}` : `${state[idx].name} reaberto.`);
+    function toggleInstallment(id, index) {
+      const item = state.find(item => item.id === id);
+      if (!item || !item.installments[index]) return;
+      const focusedId = document.activeElement.id;
+      snapshot(item);
+      const payment = item.installments[index];
+      payment.paid = !payment.paid;
+      item.paid = item.installments.every(p => p.paid);
+      const saved = saveAll(); render();
+      const focused = $(focusedId) || $("part-"+id+"-"+index);
+      if (focused) focused.focus({preventScroll:true});
+      if (saved) showToast(payment.paid ? `Pagamento de ${money(payment.amount)} registrado.` : "Pagamento desmarcado.");
     }
-
     function undoLast() {
-      const last = history.pop();
-      if (!last) return;
-
-      if (last.type === "toggle") {
-        const idx = state.findIndex(item => item.id === last.id);
-        if (idx >= 0) state[idx].paid = last.previous;
-      } else if (last.type === "add") {
-        state = state.filter(item => item.id !== last.item.id);
-      }
-
-      saveAll();
-      render();
-      showToast("Última alteração desfeita.");
+      const last = history.pop(); if (!last) return;
+      const index = state.findIndex(item => item.id === last.id);
+      if (last.type === "replace" && index >= 0) state[index] = normalizeState([last.previous])[0];
+      else if (last.type === "toggle" && index >= 0) {
+        state[index].installments.forEach(p => p.paid = !!last.previous);
+        state[index].paid = !!last.previous;
+      } else if (last.type === "add") state = state.filter(item => item.id !== last.item.id);
+      const saved=saveAll(); render(); if(saved) showToast("Última alteração desfeita.");
     }
-
     function restoreAll() {
-      const hasChanges = state.length !== seed.length || state.some(item => item.paid);
-      if (!hasChanges) {
-        showToast("Nada para restaurar.");
-        return;
-      }
-      if (!confirm("Restaurar todas as dívidas para o valor inicial?")) return;
-
-      state = seed.map(item => ({ ...item, paid:false }));
-      history = [];
-      saveAll();
-      render();
-      showToast("Lista restaurada.");
+      if (!confirm("Restaurar a lista inicial? Isso remove dívidas adicionadas, parcelamentos e pagamentos registrados.")) return;
+      state = normalizeState(seed.map(item => ({...item, paid:false})));
+      history=[]; expanded.clear(); const saved=saveAll(); render(); if(saved) showToast("Lista restaurada.");
     }
-
-    function openModal() {
-      modalWrap.classList.add("show");
-      modalWrap.setAttribute("aria-hidden", "false");
-      setTimeout(() => debtName.focus(), 50);
+    function openModal(id = null) {
+      editingId = id;
+      const item = state.find(item => item.id === id);
+      if (id && (!item || item.installments.some(p => p.paid))) return;
+      returnFocus = document.activeElement;
+      debtName.value = item ? item.name : "";
+      debtValue.value = item ? item.value.toFixed(2).replace(".",",") : "";
+      debtName.readOnly = !!item; debtValue.readOnly = !!item;
+      installmentCount.value = item ? Math.max(2,item.installments.length) : 1;
+      $("modalTitle").textContent = item ? "Parcelar dívida" : "Adicionar nova dívida";
+      $("modalDescription").textContent = "Divida o valor total em parcelas, sem acrescentar juros. Use 1 para pagamento à vista.";
+      $("saveBtn").textContent = item ? "Salvar parcelas" : "Salvar dívida";
+      updatePreview(); modalWrap.classList.add("show"); modalWrap.setAttribute("aria-hidden","false");
+      document.querySelector("main").inert = true;
+      (item ? installmentCount : debtName).focus();
     }
-
     function closeModal() {
-      modalWrap.classList.remove("show");
-      modalWrap.setAttribute("aria-hidden", "true");
-      debtName.value = "";
-      debtValue.value = "";
+      modalWrap.classList.remove("show"); modalWrap.setAttribute("aria-hidden","true");
+      document.querySelector("main").inert = false; editingId=null;
+      if (returnFocus && returnFocus.isConnected) returnFocus.focus(); else $("addBtn").focus();
     }
-
-    function addDebt() {
+    function updatePreview() {
+      const total = readValue(debtValue.value), count = Number(installmentCount.value);
+      const preview = $("installmentPreview");
+      try {
+        const payments = splitPayments(total,count);
+        const first = payments[0].amount, last=payments[count-1].amount;
+        preview.textContent = first === last ? `${count} × ${money(first)} • Total ${money(total)}` : `${count} parcelas de ${money(last)} a ${money(first)} • Total ${money(total)}. Centavos ajustados nas primeiras parcelas.`;
+      } catch(e) { preview.textContent = "Informe um valor válido e de 1 a 360 parcelas, com ao menos R$ 0,01 cada."; }
+    }
+    function saveDebt() {
       const name = debtName.value.trim();
-      const value = Number(debtValue.value);
-
-      if (!name) {
-        showToast("Digite o nome da dívida.");
-        debtName.focus();
-        return;
+      if (!name) { showToast("Digite o nome da dívida."); debtName.focus(); return; }
+      let installments;
+      const total = readValue(debtValue.value), count = Number(installmentCount.value);
+      try { installments = splitPayments(total,count); }
+      catch(e) { showToast("Confira o valor e a quantidade de parcelas."); return; }
+      if (editingId) {
+        const item = state.find(item => item.id === editingId);
+        if (!item || item.installments.some(p => p.paid)) return;
+        snapshot(item); item.installments=installments; item.paid=false;
+      } else {
+        const item={id:"user_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name, value:total/100, paid:false, installments};
+        state.push(item); history.push({type:"add",item:JSON.parse(JSON.stringify(item))});
+        if(history.length>80) history.shift();
       }
-      if (!isFinite(value) || value <= 0) {
-        showToast("Digite um valor válido.");
-        debtValue.focus();
-        return;
-      }
-
-      const item = {
-        id: "user_" + Date.now(),
-        name,
-        value,
-        paid:false
-      };
-      state.push(item);
-      history.push({ type:"add", item });
-      if (history.length > 80) history.shift();
-
-      saveAll();
-      render();
-      closeModal();
-      showToast("Nova dívida adicionada.");
+      const saved=saveAll(); render(); closeModal(); if(saved) showToast("Dívida salva com sucesso.");
     }
-
-    let toastTimer;
     function showToast(msg) {
-      toast.textContent = msg;
-      toast.classList.add("show");
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+      toast.textContent=msg; toast.classList.add("show"); clearTimeout(toastTimer);
+      toastTimer=setTimeout(()=>toast.classList.remove("show"),3500);
     }
-
-    addBtn.addEventListener("click", openModal);
-    cancelBtn.addEventListener("click", closeModal);
-    saveBtn.addEventListener("click", addDebt);
-    undoBtn.addEventListener("click", undoLast);
-    restoreBtn.addEventListener("click", restoreAll);
-
-    modalWrap.addEventListener("click", (e) => {
-      if (e.target === modalWrap) closeModal();
+    $("addBtn").addEventListener("click",()=>openModal());
+    $("cancelBtn").addEventListener("click",closeModal);
+    $("saveBtn").addEventListener("click",saveDebt);
+    $("undoBtn").addEventListener("click",undoLast);
+    $("restoreBtn").addEventListener("click",restoreAll);
+    debtValue.addEventListener("input",updatePreview);
+    installmentCount.addEventListener("input",updatePreview);
+    modalWrap.addEventListener("click",e=>{if(e.target===modalWrap)closeModal();});
+    document.addEventListener("keydown",e=>{
+      if(!modalWrap.classList.contains("show"))return;
+      if(e.key==="Escape")closeModal();
+      if(e.key==="Tab") {
+        const nodes=[...modalWrap.querySelectorAll("input,button")].filter(n=>!n.disabled);
+        const first=nodes[0],last=nodes[nodes.length-1];
+        if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+        else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+      }
     });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && modalWrap.classList.contains("show")) closeModal();
-    });
-
     render();
-
-    if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js").catch(() => {});
+    if("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      window.addEventListener("load", async () => {
+        try {
+          await navigator.serviceWorker.register("./sw.js");
+          await navigator.serviceWorker.ready;
+          // Atualiza somente o HTML em cache, preservando os dados de dívidas.
+          const response = await fetch("./index.html?v=parcelas-20260901", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="parcelas-1"')) return;
+          const cache = await caches.open("emprestimos-plus-v1");
+          await cache.put(new URL("./", location.href), response.clone());
+          await cache.put(new URL("./index.html", location.href), response);
+        } catch(e) {}
       });
     }
   </script>
