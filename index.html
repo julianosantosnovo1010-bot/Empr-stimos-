@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="parcelas-1">
+<html lang="pt-BR" data-app-version="parcelas-2">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -204,7 +204,7 @@
     }
     .paid .debt-value {
       color:var(--ok);
-      text-decoration:line-through;
+      text-decoration:none;
       text-decoration-thickness:1.5px;
     }
     .pay-btn {
@@ -538,7 +538,7 @@
         const paidCount = item.installments.filter(p => p.paid).length;
         const card = element("article", "debt" + (item.paid ? " paid" : ""));
         card.append(element("div", "debt-name", item.name));
-        card.append(element("div", "debt-value", money(item.paid ? amounts.total : amounts.remaining)));
+        card.append(element("div", "debt-value", money(amounts.remaining)));
         const description = count > 1
           ? `${paidCount} de ${count} parcelas pagas • Total: ${money(amounts.total)} • Pago: ${money(amounts.paid)}`
           : (item.paid ? "Dívida quitada" : "Saldo em aberto");
@@ -687,8 +687,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=parcelas-20260901", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="parcelas-1"')) return;
+          const response = await fetch("./index.html?v=saldo-20260901", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="parcelas-2"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
