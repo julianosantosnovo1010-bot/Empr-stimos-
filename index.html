@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="parcelas-2">
+<html lang="pt-BR" data-app-version="conta-1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -382,6 +382,20 @@
     .modal { max-height:85dvh; overflow:auto; }
     .modal-wrap { overflow:auto; }
     [hidden] { display:none !important; }
+
+    .account-panel { margin-top:18px; padding:22px 18px; border:1px solid var(--line); border-radius:28px; background:var(--card); }
+    .account-panel h2 { font-size:24px; margin:0 0 10px; letter-spacing:-.03em; }
+    .account-panel p { font-size:14px; line-height:1.5; color:var(--soft); margin:0 0 16px; }
+    .account-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:end; margin-bottom:16px; }
+    .account-form .field { min-width:0; }
+    .account-form button { min-height:58px; padding:12px 16px; }
+    .account-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .account-stats .stat strong { overflow-wrap:anywhere; font-size:clamp(24px,5vw,32px); line-height:1.25; }
+    .account-stats .stat strong.positive { color:var(--ok); }
+    .account-stats .stat strong.negative { color:#ffb3ae; }
+    #accountNote { margin:12px 0 0; }
+    @media (max-width:560px) { .account-stats { grid-template-columns:1fr; } }
+    @media (max-width:360px) { .account-form { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -402,6 +416,23 @@
         <div class="stat"><span>Já pago</span><strong id="paidTotal">R$ 0,00</strong></div>
         <div class="stat"><span>Em aberto</span><strong id="openCount">12</strong></div>
       </div>
+    </section>
+
+    <section class="account-panel" aria-labelledby="accountTitle">
+      <h2 id="accountTitle">Saldo em conta</h2>
+      <p>Informe quanto você tem agora. Os próximos pagamentos diminuem esse saldo automaticamente.</p>
+      <form id="accountForm" class="account-form">
+        <div class="field">
+          <label for="accountInput">Seu saldo atual (R$)</label>
+          <input id="accountInput" type="text" inputmode="decimal" placeholder="Ex.: 1.500,00" autocomplete="off" required />
+        </div>
+        <button class="outline-btn primary-btn" type="submit">Salvar saldo</button>
+      </form>
+      <div class="account-stats" aria-live="polite" aria-atomic="true">
+        <div class="stat"><span>Saldo em conta agora</span><strong id="accountCurrent">Não informado</strong></div>
+        <div class="stat"><span>Após quitar todas as dívidas em aberto</span><strong id="accountProjected">Não informado</strong></div>
+      </div>
+      <p id="accountNote">Salve seu saldo para ver quanto sobra ou falta.</p>
     </section>
 
     <div class="head">
@@ -455,6 +486,8 @@
   <script>
     const STORAGE_KEY = "controle_emprestimos_plus_v1";
     const HISTORY_KEY = "controle_emprestimos_plus_history_v1";
+    const LEDGER_KEY = "controle_emprestimos_plus_ledger_v1";
+    const savedLedger = loadLedger();
     const seed = [{"id": "monk", "name": "Monk", "value": 700.0}, {"id": "greenword", "name": "Greenword", "value": 260.0}, {"id": "credja", "name": "Cred Já", "value": 300.0}, {"id": "tiffany", "name": "Tiffany Cob", "value": 780.0}, {"id": "alef", "name": "Alef", "value": 800.0}, {"id": "quantum1", "name": "Quantum 1", "value": 1350.0}, {"id": "greencreed", "name": "Green Creed", "value": 279.0}, {"id": "hiper05", "name": "Hiper 05 (possível desconto)", "value": 1050.0}, {"id": "jr", "name": "JR", "value": 300.0}, {"id": "jbcreditos", "name": "JB Créditos", "value": 700.0}, {"id": "sevengroup", "name": "Seven GROUP", "value": 560.0}, {"id": "emprestshopping", "name": "Emprest Shopping", "value": 1300.0}];
     const $ = id => document.getElementById(id);
     const debtList = $("debtList");
@@ -465,6 +498,7 @@
     const toast = $("toast");
     let history = loadHistory();
     let state = loadState();
+    let account = savedLedger ? savedLedger.account : null;
     let editingId = null;
     let returnFocus = null;
     let toastTimer;
@@ -493,21 +527,57 @@
         return {...item, value:total / 100, installments, paid:installments.every(p => p.paid)};
       });
     }
+    function loadLedger() {
+      try {
+        const ledger = JSON.parse(localStorage.getItem(LEDGER_KEY));
+        if (ledger && ledger.version === 1 && Array.isArray(ledger.state) && Array.isArray(ledger.history) &&
+          (ledger.account === null || (Number.isSafeInteger(ledger.account.amount) && Number.isSafeInteger(ledger.account.paidAtEntry)))) return ledger;
+      } catch(e) {}
+      return null;
+    }
+    function paidCents() { return state.reduce((sum,item) => sum + totals(item).paid, 0); }
+    function accountCents() { return account ? account.amount - (paidCents() - account.paidAtEntry) : null; }
+    function renderAccount(remaining) {
+      const current = accountCents();
+      const projected = current === null ? null : current - remaining;
+      $("accountCurrent").textContent = current === null ? "Não informado" : money(current);
+      $("accountProjected").textContent = projected === null ? "Não informado" : money(projected);
+      $("accountCurrent").className = current === null ? "" : (current < 0 ? "negative" : "positive");
+      $("accountProjected").className = projected === null ? "" : (projected < 0 ? "negative" : "positive");
+      $("accountNote").textContent = projected === null ? "Salve seu saldo para ver quanto sobra ou falta."
+        : projected < 0 ? `Faltam ${money(-projected)} para quitar tudo. Atualize o saldo acima se entrar ou sair dinheiro por outro motivo.`
+        : `Após quitar tudo, sobram ${money(projected)}. Atualize o saldo acima se entrar ou sair dinheiro por outro motivo.`;
+    }
+    function saveAccount() {
+      const raw = $("accountInput").value.trim();
+      const amount = raw.startsWith("-") ? -readValue(raw.slice(1)) : readValue(raw);
+      if (!Number.isSafeInteger(amount)) { showToast("Informe um saldo válido, como 1.500,00."); $("accountInput").focus(); return; }
+      history.push({type:"account", previous:account ? {...account} : null});
+      if(history.length > 80) history.shift();
+      // O valor informado é o saldo de agora; pagamentos anteriores não são descontados outra vez.
+      account = {amount, paidAtEntry:paidCents()};
+      const saved = saveAll(); render();
+      if(saved) { $("accountInput").value=""; showToast("Saldo atualizado. Os próximos pagamentos serão descontados dele."); }
+    }
     function loadState() {
       try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        const saved = savedLedger ? savedLedger.state : JSON.parse(localStorage.getItem(STORAGE_KEY));
         if (Array.isArray(saved)) return normalizeState(saved);
       } catch (e) {}
       return normalizeState(seed.map(item => ({...item, paid:false})));
     }
     function loadHistory() {
-      try { const saved = JSON.parse(localStorage.getItem(HISTORY_KEY)); return Array.isArray(saved) ? saved : []; }
+      try { const saved = savedLedger ? savedLedger.history : JSON.parse(localStorage.getItem(HISTORY_KEY)); return Array.isArray(saved) ? saved : []; }
       catch (e) { return []; }
     }
     function saveAll() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      // Dívidas e saldo são gravados juntos para manter os valores consistentes.
+      try { localStorage.setItem(LEDGER_KEY, JSON.stringify({version:1, state, history, account})); }
       catch (e) { showToast("Não foi possível salvar. Mantenha esta página aberta e tente novamente."); return false; }
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      } catch (e) {}
       return true;
     }
     function snapshot(item) {
@@ -576,6 +646,7 @@
       const total = all.reduce((sum,t) => sum + t.total, 0);
       const paid = all.reduce((sum,t) => sum + t.paid, 0);
       $("remainingTotal").textContent = money(total-paid);
+      renderAccount(total-paid);
       $("initialTotal").textContent = money(total);
       $("paidTotal").textContent = money(paid);
       $("openCount").textContent = String(state.filter(item => !item.paid).length);
@@ -598,7 +669,8 @@
     function undoLast() {
       const last = history.pop(); if (!last) return;
       const index = state.findIndex(item => item.id === last.id);
-      if (last.type === "replace" && index >= 0) state[index] = normalizeState([last.previous])[0];
+      if (last.type === "account") account = last.previous ? {...last.previous} : null;
+      else if (last.type === "replace" && index >= 0) state[index] = normalizeState([last.previous])[0];
       else if (last.type === "toggle" && index >= 0) {
         state[index].installments.forEach(p => p.paid = !!last.previous);
         state[index].paid = !!last.previous;
@@ -606,8 +678,10 @@
       const saved=saveAll(); render(); if(saved) showToast("Última alteração desfeita.");
     }
     function restoreAll() {
-      if (!confirm("Restaurar a lista inicial? Isso remove dívidas adicionadas, parcelamentos e pagamentos registrados.")) return;
+      if (!confirm("Restaurar a lista inicial? Isso remove dívidas adicionadas, parcelamentos e pagamentos registrados. O saldo atual da conta será mantido.")) return;
+      const currentAccount = accountCents();
       state = normalizeState(seed.map(item => ({...item, paid:false})));
+      if (currentAccount !== null) account = {amount:currentAccount, paidAtEntry:0};
       history=[]; expanded.clear(); const saved=saveAll(); render(); if(saved) showToast("Lista restaurada.");
     }
     function openModal(id = null) {
@@ -662,6 +736,7 @@
       toast.textContent=msg; toast.classList.add("show"); clearTimeout(toastTimer);
       toastTimer=setTimeout(()=>toast.classList.remove("show"),3500);
     }
+    $("accountForm").addEventListener("submit", e => { e.preventDefault(); saveAccount(); });
     $("addBtn").addEventListener("click",()=>openModal());
     $("cancelBtn").addEventListener("click",closeModal);
     $("saveBtn").addEventListener("click",saveDebt);
@@ -687,8 +762,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=saldo-20260901", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="parcelas-2"')) return;
+          const response = await fetch("./index.html?v=conta-20260901", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="conta-1"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
