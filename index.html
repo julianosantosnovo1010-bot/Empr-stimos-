@@ -347,6 +347,23 @@
       .pay-btn { min-width:103px; font-size:14px; }
       .outline-btn { font-size:14px; min-height:62px; }
     }
+    /* Ajuste do resumo para telas pequenas */
+    @media (max-width: 560px) {
+      .topbar { flex-wrap: wrap; }
+      .stats { grid-template-columns: 1fr; }
+      .stat { min-width: 0; min-height: 80px; padding: 14px 16px; }
+      .stat strong {
+        font-size: 26px;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      .total {
+        font-size: clamp(30px, 9vw, 48px);
+        line-height: 1.15;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+    }
   </style>
 </head>
 <body>
