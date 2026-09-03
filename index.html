@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="mensal-1">
+<html lang="pt-BR" data-app-version="disponivel-1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -396,6 +396,15 @@
     #accountNote { margin:12px 0 0; }
     @media (max-width:560px) { .account-stats { grid-template-columns:1fr; } }
     @media (max-width:360px) { .account-form { grid-template-columns:1fr; } }
+
+    .account-panel { margin:0 0 18px; background:linear-gradient(145deg,var(--panel),var(--panel2)); }
+    .available-highlight { margin:0 0 16px; padding:18px 14px; border:1px solid rgba(158,229,196,.28); border-radius:20px; background:rgba(0,0,0,.14); }
+    .available-highlight strong { display:block; overflow-wrap:anywhere; font-size:clamp(30px,9vw,52px); line-height:1.2; letter-spacing:-.04em; }
+    .available-highlight strong.positive { color:var(--ok); }
+    .available-highlight strong.negative { color:#ffb3ae; }
+    .available-highlight p { margin:10px 0 0; font-size:14px; }
+    .debt-total-note { margin:-10px 0 18px; color:var(--soft); font-size:14px; line-height:1.5; }
+    #planImpact { margin-top:10px; padding:12px; border:1px solid rgba(158,229,196,.28); border-radius:12px; }
   </style>
 </head>
 <body>
@@ -408,19 +417,9 @@
     <h1>Empréstimos</h1>
     <p class="subtitle">Organize suas dívidas e parcelas. O saldo diminui a cada pagamento.</p>
 
-    <section class="panel">
-      <div class="eyebrow">Valor total da dívida</div>
-      <div class="total" id="remainingTotal">R$ 8.379,00</div>
-      <div class="stats">
-        <div class="stat"><span>Total inicial</span><strong id="initialTotal">R$ 8.379,00</strong></div>
-        <div class="stat"><span>Já pago</span><strong id="paidTotal">R$ 0,00</strong></div>
-        <div class="stat"><span>Em aberto</span><strong id="openCount">12</strong></div>
-      </div>
-    </section>
-
     <section class="account-panel" aria-labelledby="accountTitle">
-      <h2 id="accountTitle">Saldo em conta</h2>
-      <p>Informe quanto você tem agora. A previsão desconta apenas as parcelas deste mês e os valores anteriores ainda não pagos.</p>
+      <h2 id="accountTitle">Meu dinheiro neste mês</h2>
+      <p>Informe seu saldo atual. Ao parcelar, só a parcela do mês fica reservada. Ao pagar, o valor sai do saldo em conta.</p>
       <form id="accountForm" class="account-form">
         <div class="field">
           <label for="accountInput">Seu saldo atual (R$)</label>
@@ -428,12 +427,28 @@
         </div>
         <button class="outline-btn primary-btn" type="submit">Salvar saldo</button>
       </form>
+      <div class="available-highlight" aria-live="polite" aria-atomic="true">
+        <div class="eyebrow">Disponível neste mês</div>
+        <strong id="accountProjected">Não informado</strong>
+        <p id="accountEquation">Saldo em conta menos o que falta pagar neste mês.</p>
+      </div>
       <div class="account-stats" aria-live="polite" aria-atomic="true">
         <div class="stat"><span id="monthLabel">A pagar neste mês</span><strong id="monthlyDue">R$ 0,00</strong></div>
         <div class="stat"><span>Saldo em conta agora</span><strong id="accountCurrent">Não informado</strong></div>
-        <div class="stat"><span>Saldo previsto após os pagamentos deste mês</span><strong id="accountProjected">Não informado</strong></div>
+
       </div>
       <p id="accountNote">Salve seu saldo para ver quanto sobra ou falta.</p>
+    </section>
+
+    <section class="panel">
+      <div class="eyebrow">Dívida total restante</div>
+      <div class="total" id="remainingTotal">R$ 8.379,00</div>
+      <p class="debt-total-note">Inclui as parcelas dos próximos meses.</p>
+      <div class="stats">
+        <div class="stat"><span>Total inicial</span><strong id="initialTotal">R$ 8.379,00</strong></div>
+        <div class="stat"><span>Já pago</span><strong id="paidTotal">R$ 0,00</strong></div>
+        <div class="stat"><span>Em aberto</span><strong id="openCount">12</strong></div>
+      </div>
     </section>
 
     <div class="head">
@@ -479,6 +494,7 @@
         <label for="firstMonth">Mês da primeira parcela</label>
         <input id="firstMonth" type="month" required />
       </div>
+      <div id="planImpact" class="installment-preview" role="status" aria-live="polite" hidden></div>
       <div class="modal-actions">
         <button class="outline-btn" type="button" id="cancelBtn">Cancelar</button>
         <button class="outline-btn primary-btn" type="button" id="saveBtn">Salvar dívida</button>
@@ -571,6 +587,8 @@
       const projected = current === null ? null : current - remaining;
       $("accountCurrent").textContent = current === null ? "Não informado" : money(current);
       $("accountProjected").textContent = projected === null ? "Não informado" : money(projected);
+      $("accountEquation").textContent = current === null ? "Informe o saldo da conta para calcular."
+        : `${money(current)} em conta − ${money(remaining)} a pagar neste mês = ${money(projected)} disponíveis.`;
       $("accountCurrent").className = current === null ? "" : (current < 0 ? "negative" : "positive");
       $("accountProjected").className = projected === null ? "" : (projected < 0 ? "negative" : "positive");
       $("accountNote").textContent = projected === null ? "Salve seu saldo para ver quanto sobra ou falta."
@@ -744,8 +762,21 @@
     function updatePreview() {
       const total = readValue(debtValue.value), count = Number(installmentCount.value);
       const preview = $("installmentPreview");
+      const impact = $("planImpact");
+      impact.hidden = true;
       try {
         const payments = splitPayments(total,count,false,$("firstMonth").value);
+        const current = accountCents();
+        if (current !== null) {
+          const thisMonth = monthKey();
+          const original = state.find(item => item.id === editingId);
+          const dueBefore = original ? original.installments.reduce((sum,p) => sum + (!p.paid && p.dueMonth <= thisMonth ? p.amount : 0),0) : 0;
+          const dueAfter = payments.reduce((sum,p) => sum + (p.dueMonth <= thisMonth ? p.amount : 0),0);
+          const available = current - monthlyDueCents() + dueBefore - dueAfter;
+          const freed = dueBefore - dueAfter;
+          impact.textContent = `Disponível neste mês ao salvar: ${money(available)}.${freed > 0 ? ` Este parcelamento libera ${money(freed)} neste mês.` : ""}`;
+          impact.hidden = false;
+        }
         const first = payments[0].amount, last=payments[count-1].amount;
         preview.textContent = first === last ? `${count} × ${money(first)} • Total ${money(total)}` : `${count} parcelas de ${money(last)} a ${money(first)} • Total ${money(total)}. Centavos ajustados nas primeiras parcelas.`;
       } catch(e) { preview.textContent = "Informe um valor válido e de 1 a 360 parcelas, com ao menos R$ 0,01 cada."; }
@@ -802,8 +833,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=mensal-20260903", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="mensal-1"')) return;
+          const response = await fetch("./index.html?v=disponivel-20260903", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="disponivel-1"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
