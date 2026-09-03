@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="conta-1">
+<html lang="pt-BR" data-app-version="mensal-1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -420,7 +420,7 @@
 
     <section class="account-panel" aria-labelledby="accountTitle">
       <h2 id="accountTitle">Saldo em conta</h2>
-      <p>Informe quanto você tem agora. Os próximos pagamentos diminuem esse saldo automaticamente.</p>
+      <p>Informe quanto você tem agora. A previsão desconta apenas as parcelas deste mês e os valores anteriores ainda não pagos.</p>
       <form id="accountForm" class="account-form">
         <div class="field">
           <label for="accountInput">Seu saldo atual (R$)</label>
@@ -429,8 +429,9 @@
         <button class="outline-btn primary-btn" type="submit">Salvar saldo</button>
       </form>
       <div class="account-stats" aria-live="polite" aria-atomic="true">
+        <div class="stat"><span id="monthLabel">A pagar neste mês</span><strong id="monthlyDue">R$ 0,00</strong></div>
         <div class="stat"><span>Saldo em conta agora</span><strong id="accountCurrent">Não informado</strong></div>
-        <div class="stat"><span>Após quitar todas as dívidas em aberto</span><strong id="accountProjected">Não informado</strong></div>
+        <div class="stat"><span>Saldo previsto após os pagamentos deste mês</span><strong id="accountProjected">Não informado</strong></div>
       </div>
       <p id="accountNote">Salve seu saldo para ver quanto sobra ou falta.</p>
     </section>
@@ -448,7 +449,7 @@
 
     <section class="list" id="debtList"></section>
 
-    <div class="info">Toque em <strong>Parcelar</strong> para dividir uma dívida. Em <strong>Ver parcelas</strong>, marque os pagamentos individualmente. A divisão usa o valor total informado, sem acrescentar juros.</div>
+    <div class="info">Toque em <strong>Parcelar</strong> para dividir uma dívida. Em <strong>Ver parcelas</strong>, marque os pagamentos individualmente. A primeira parcela entra no mês escolhido e as seguintes entram nos próximos meses, sem acrescentar juros.</div>
 
     <div class="footer">Controle de dívidas • salvo no navegador do seu iPhone</div>
   </main>
@@ -474,6 +475,10 @@
         <input id="installmentCount" type="number" inputmode="numeric" min="1" max="360" step="1" value="1" />
         <div id="installmentPreview" class="installment-preview" role="status" aria-live="polite"></div>
       </div>
+      <div class="field" style="margin-top:14px">
+        <label for="firstMonth">Mês da primeira parcela</label>
+        <input id="firstMonth" type="month" required />
+      </div>
       <div class="modal-actions">
         <button class="outline-btn" type="button" id="cancelBtn">Cancelar</button>
         <button class="outline-btn primary-btn" type="button" id="saveBtn">Salvar dívida</button>
@@ -496,6 +501,7 @@
     const debtValue = $("debtValue");
     const installmentCount = $("installmentCount");
     const toast = $("toast");
+    let needsScheduleMigration = false;
     let history = loadHistory();
     let state = loadState();
     let account = savedLedger ? savedLedger.account : null;
@@ -512,10 +518,26 @@
       if (value.includes(",")) value = value.replace(/\./g, "").replace(",", ".");
       return /^\d+(\.\d{1,2})?$/.test(value) ? cents(value) : NaN;
     }
-    function splitPayments(total, count, paid = false) {
+    function monthKey(date = new Date()) {
+      return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`;
+    }
+    function validMonth(value) { return typeof value === "string" && /^(19|20|21)\d{2}-(0[1-9]|1[0-2])$/.test(value); }
+    function shiftMonth(value, offset) {
+      const [year, month] = value.split("-").map(Number);
+      return monthKey(new Date(year, month-1+offset, 1, 12));
+    }
+    function monthLabel(value) {
+      const [year, month] = value.split("-").map(Number);
+      return new Intl.DateTimeFormat("pt-BR", {month:"short", year:"numeric"}).format(new Date(year,month-1,1,12));
+    }
+    function monthlyDueCents(month = monthKey()) {
+      return state.reduce((total,item) => total + item.installments.reduce((sum,p) => sum + (!p.paid && p.dueMonth <= month ? p.amount : 0), 0), 0);
+    }
+    function splitPayments(total, count, paid = false, firstMonth = monthKey()) {
       if (!Number.isSafeInteger(total) || total < 1 || !Number.isInteger(count) || count < 1 || count > 360 || count > total) throw new Error("Parcelamento inválido");
+      if (!validMonth(firstMonth)) throw new Error("Mês inválido");
       const base = Math.floor(total / count), remainder = total % count;
-      return Array.from({length: count}, (_, index) => ({amount: base + (index < remainder ? 1 : 0), paid}));
+      return Array.from({length: count}, (_, index) => ({amount: base + (index < remainder ? 1 : 0), paid, dueMonth:shiftMonth(firstMonth,index)}));
     }
     function normalizeState(list) {
       return list.map(item => {
@@ -523,7 +545,11 @@
         const valid = Array.isArray(item.installments) && item.installments.length > 0 &&
           item.installments.every(p => Number.isSafeInteger(p.amount) && p.amount > 0) &&
           item.installments.reduce((sum, p) => sum + p.amount, 0) === total;
-        const installments = valid ? item.installments.map(p => ({amount:p.amount, paid:!!p.paid})) : splitPayments(total, 1, !!item.paid);
+        const firstUnpaid = valid ? Math.max(0, item.installments.findIndex(p => !p.paid)) : 0;
+        const installments = valid ? item.installments.map((p,index) => ({
+          amount:p.amount, paid:!!p.paid,
+          dueMonth:validMonth(p.dueMonth) ? p.dueMonth : shiftMonth(monthKey(),index-firstUnpaid)
+        })) : splitPayments(total, 1, !!item.paid);
         return {...item, value:total / 100, installments, paid:installments.every(p => p.paid)};
       });
     }
@@ -537,7 +563,10 @@
     }
     function paidCents() { return state.reduce((sum,item) => sum + totals(item).paid, 0); }
     function accountCents() { return account ? account.amount - (paidCents() - account.paidAtEntry) : null; }
-    function renderAccount(remaining) {
+    function renderAccount() {
+      const remaining = monthlyDueCents();
+      $("monthlyDue").textContent = money(remaining);
+      $("monthLabel").textContent = `A pagar em ${monthLabel(monthKey())}`;
       const current = accountCents();
       const projected = current === null ? null : current - remaining;
       $("accountCurrent").textContent = current === null ? "Não informado" : money(current);
@@ -545,8 +574,8 @@
       $("accountCurrent").className = current === null ? "" : (current < 0 ? "negative" : "positive");
       $("accountProjected").className = projected === null ? "" : (projected < 0 ? "negative" : "positive");
       $("accountNote").textContent = projected === null ? "Salve seu saldo para ver quanto sobra ou falta."
-        : projected < 0 ? `Faltam ${money(-projected)} para quitar tudo. Atualize o saldo acima se entrar ou sair dinheiro por outro motivo.`
-        : `Após quitar tudo, sobram ${money(projected)}. Atualize o saldo acima se entrar ou sair dinheiro por outro motivo.`;
+        : projected < 0 ? `Faltam ${money(-projected)} para os pagamentos deste mês. Parcelas futuras não entram nesta previsão.`
+        : `Após os pagamentos deste mês, sobram ${money(projected)}. Parcelas futuras não entram nesta previsão.`;
     }
     function saveAccount() {
       const raw = $("accountInput").value.trim();
@@ -562,7 +591,11 @@
     function loadState() {
       try {
         const saved = savedLedger ? savedLedger.state : JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (Array.isArray(saved)) return normalizeState(saved);
+        if (Array.isArray(saved)) {
+          const normalized = normalizeState(saved);
+          needsScheduleMigration = saved.some(item => !Array.isArray(item.installments) || item.installments.some(p => !validMonth(p.dueMonth)));
+          return normalized;
+        }
       } catch (e) {}
       return normalizeState(seed.map(item => ({...item, paid:false})));
     }
@@ -613,6 +646,8 @@
           ? `${paidCount} de ${count} parcelas pagas • Total: ${money(amounts.total)} • Pago: ${money(amounts.paid)}`
           : (item.paid ? "Dívida quitada" : "Saldo em aberto");
         card.append(element("div", "debt-meta", description));
+        const dueNow = item.installments.filter(p => !p.paid && p.dueMonth <= monthKey()).reduce((sum,p) => sum + p.amount,0);
+        card.append(element("div", "debt-meta", `A pagar neste mês: ${money(dueNow)}`));
         if (item.name.toLowerCase().includes("possível desconto") || item.id === "hiper05") card.append(element("div", "debt-note", "Possível desconto"));
         const actions = element("div", "debt-actions");
         if (!item.paid) {
@@ -633,7 +668,7 @@
           details.append(element("summary", "", "Ver parcelas"));
           item.installments.forEach((p, index) => {
             const row = element("div", "installment-row" + (p.paid ? " is-paid" : ""));
-            row.append(element("span", "", `${index+1}/${count} • ${money(p.amount)}${p.paid ? " • Paga" : " • Em aberto"}`));
+            row.append(element("span", "", `${index+1}/${count} • ${money(p.amount)} • ${monthLabel(p.dueMonth)}${p.paid ? " • Paga" : " • Em aberto"}`));
             const control = button(p.paid ? "Desmarcar" : "Marcar paga", "", () => toggleInstallment(item.id, index), `${p.paid ? "Desmarcar pagamento da" : "Pagar"} parcela ${index+1} de ${item.name}`);
             control.id = `part-${item.id}-${index}`;
             row.append(control); details.append(row);
@@ -646,7 +681,7 @@
       const total = all.reduce((sum,t) => sum + t.total, 0);
       const paid = all.reduce((sum,t) => sum + t.paid, 0);
       $("remainingTotal").textContent = money(total-paid);
-      renderAccount(total-paid);
+      renderAccount();
       $("initialTotal").textContent = money(total);
       $("paidTotal").textContent = money(paid);
       $("openCount").textContent = String(state.filter(item => !item.paid).length);
@@ -693,8 +728,9 @@
       debtValue.value = item ? item.value.toFixed(2).replace(".",",") : "";
       debtName.readOnly = !!item; debtValue.readOnly = !!item;
       installmentCount.value = item ? Math.max(2,item.installments.length) : 1;
+      $("firstMonth").value = item && item.installments.length > 1 ? item.installments[0].dueMonth : monthKey();
       $("modalTitle").textContent = item ? "Parcelar dívida" : "Adicionar nova dívida";
-      $("modalDescription").textContent = "Divida o valor total em parcelas, sem acrescentar juros. Use 1 para pagamento à vista.";
+      $("modalDescription").textContent = "Escolha a quantidade de parcelas e o mês da primeira. Uma parcela por mês, sem acrescentar juros. Use 1 para pagamento à vista.";
       $("saveBtn").textContent = item ? "Salvar parcelas" : "Salvar dívida";
       updatePreview(); modalWrap.classList.add("show"); modalWrap.setAttribute("aria-hidden","false");
       document.querySelector("main").inert = true;
@@ -709,7 +745,7 @@
       const total = readValue(debtValue.value), count = Number(installmentCount.value);
       const preview = $("installmentPreview");
       try {
-        const payments = splitPayments(total,count);
+        const payments = splitPayments(total,count,false,$("firstMonth").value);
         const first = payments[0].amount, last=payments[count-1].amount;
         preview.textContent = first === last ? `${count} × ${money(first)} • Total ${money(total)}` : `${count} parcelas de ${money(last)} a ${money(first)} • Total ${money(total)}. Centavos ajustados nas primeiras parcelas.`;
       } catch(e) { preview.textContent = "Informe um valor válido e de 1 a 360 parcelas, com ao menos R$ 0,01 cada."; }
@@ -719,8 +755,8 @@
       if (!name) { showToast("Digite o nome da dívida."); debtName.focus(); return; }
       let installments;
       const total = readValue(debtValue.value), count = Number(installmentCount.value);
-      try { installments = splitPayments(total,count); }
-      catch(e) { showToast("Confira o valor e a quantidade de parcelas."); return; }
+      try { installments = splitPayments(total,count,false,$("firstMonth").value); }
+      catch(e) { showToast("Confira o valor, a quantidade de parcelas e o mês inicial."); return; }
       if (editingId) {
         const item = state.find(item => item.id === editingId);
         if (!item || item.installments.some(p => p.paid)) return;
@@ -744,6 +780,9 @@
     $("restoreBtn").addEventListener("click",restoreAll);
     debtValue.addEventListener("input",updatePreview);
     installmentCount.addEventListener("input",updatePreview);
+    $("firstMonth").addEventListener("input",updatePreview);
+    window.addEventListener("focus", () => render());
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
     modalWrap.addEventListener("click",e=>{if(e.target===modalWrap)closeModal();});
     document.addEventListener("keydown",e=>{
       if(!modalWrap.classList.contains("show"))return;
@@ -756,14 +795,15 @@
       }
     });
     render();
+    if (needsScheduleMigration) saveAll();
     if("serviceWorker" in navigator && location.protocol.startsWith("http")) {
       window.addEventListener("load", async () => {
         try {
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=conta-20260901", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="conta-1"')) return;
+          const response = await fetch("./index.html?v=mensal-20260903", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="mensal-1"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
