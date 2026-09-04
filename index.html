@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="gastos-1">
+<html lang="pt-BR" data-app-version="parcelas-gastos-2">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -48,6 +48,7 @@
     .available-highlight strong.positive { color:#fff; }
     .available-highlight strong.negative { color:#ffe0ce; }
     .available-highlight p { margin:14px 0 0; font-size:14px; line-height:1.5; color:#f0dfff; }
+    .available-highlight strong.balance-changed { animation:balance-pop .42s ease-out; }
     .account-form { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:10px; margin:18px 20px 0; }
     .account-form button { min-height:52px; }
     .account-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding:22px; }
@@ -57,6 +58,9 @@
     .stat strong { display:block; font-size:22px; line-height:1.3; margin-top:6px; letter-spacing:-.025em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
     .stat strong.negative { color:#ff9a99; }
     #accountNote { margin:0 22px 20px; font-size:13px; color:var(--muted); line-height:1.5; }
+    .future-installments { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 20px 18px; padding:12px 14px; border-radius:13px; background:var(--tint); color:var(--brand-dark); }
+    .future-installments span { font-size:13px; line-height:1.4; }
+    .future-installments strong { flex-shrink:0; font-size:16px; font-variant-numeric:tabular-nums; }
     .panel { padding:24px; }
     .panel .total { margin:8px 0 6px; font-size:clamp(28px,7.5vw,38px); font-weight:750; line-height:1.2; letter-spacing:-.04em; overflow-wrap:anywhere; }
     .debt-total-note { font-size:13px; color:var(--muted); margin:0 0 20px; }
@@ -147,6 +151,7 @@
     .toast.show { opacity:1; transform:translate(-50%,0); }
     [hidden] { display:none !important; }
     @keyframes modal-in { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes balance-pop { 0% { transform:scale(.97); opacity:.7; } 55% { transform:scale(1.035); } 100% { transform:scale(1); opacity:1; } }
     @media (hover:hover) {
       .primary-btn:hover,.pay-btn:hover { background:#7100bc; box-shadow:0 4px 14px #820ad13b; }
       .outline-btn:not(.primary-btn):hover { background:#302435; border-color:#795491; }
@@ -198,9 +203,9 @@
     <section class="account-panel" aria-labelledby="accountTitle">
       <div class="account-header"><h2 id="accountTitle">Meu saldo</h2><button id="editBalanceBtn" class="edit-balance" type="button" aria-controls="accountForm" aria-expanded="true">Atualizar saldo</button></div>
       <div class="available-highlight" aria-live="polite" aria-atomic="true">
-        <div class="eyebrow">Disponível neste mês</div>
+        <div class="eyebrow">Saldo livre neste mês</div>
         <strong id="accountProjected">Não informado</strong>
-        <p id="accountEquation">Saldo em conta menos o que falta pagar neste mês.</p>
+        <p id="accountEquation">Ao parcelar, somente a parcela deste mês entra no cálculo.</p>
       </div>
       <form id="accountForm" class="account-form">
         <div class="field">
@@ -210,10 +215,11 @@
         <button class="outline-btn primary-btn" type="submit">Salvar saldo</button>
       </form>
       <div class="account-stats" aria-live="polite" aria-atomic="true">
-        <div class="stat"><span id="monthLabel">A pagar neste mês</span><strong id="monthlyDue">R$ 0,00</strong></div>
+        <div class="stat"><span id="monthLabel">Parcelas deste mês</span><strong id="monthlyDue">R$ 0,00</strong></div>
         <div class="stat"><span>Saldo em conta agora</span><strong id="accountCurrent">Não informado</strong></div>
 
       </div>
+      <div class="future-installments"><span>Ficou para os próximos meses</span><strong id="futureDue">R$ 0,00</strong></div>
       <p id="accountNote">Salve seu saldo para ver quanto sobra ou falta.</p>
     </section>
 
@@ -331,6 +337,7 @@
     let editingId = null;
     let returnFocus = null;
     let toastTimer;
+    let lastProjectedCents = null;
     const expanded = new Set();
 
     function brl(v) { return new Intl.NumberFormat("pt-BR", {style:"currency", currency:"BRL"}).format(v); }
@@ -411,19 +418,29 @@
       $("headerMonth").textContent = monthLabel(monthKey());
       syncBalanceForm();
       const remaining = monthlyDueCents();
+      const totalOpen = state.reduce((sum,item) => sum + totals(item).remaining, 0);
+      const future = Math.max(0, totalOpen - remaining);
       $("monthlyDue").textContent = money(remaining);
-      $("monthLabel").textContent = `A pagar em ${monthLabel(monthKey())}`;
+      $("monthLabel").textContent = `Parcelas de ${monthLabel(monthKey())}`;
+      $("futureDue").textContent = money(future);
       const current = accountCents();
       const projected = current === null ? null : current - remaining;
+      const projectedNode = $("accountProjected");
       $("accountCurrent").textContent = current === null ? "Não informado" : money(current);
-      $("accountProjected").textContent = projected === null ? "Não informado" : money(projected);
-      $("accountEquation").textContent = current === null ? "Informe o saldo da conta para calcular."
-        : `${money(current)} em conta − ${money(remaining)} a pagar neste mês = ${money(projected)} disponíveis.`;
+      projectedNode.textContent = projected === null ? "Não informado" : money(projected);
       $("accountCurrent").className = current === null ? "" : (current < 0 ? "negative" : "positive");
-      $("accountProjected").className = projected === null ? "" : (projected < 0 ? "negative" : "positive");
+      projectedNode.className = projected === null ? "" : (projected < 0 ? "negative" : "positive");
+      if (lastProjectedCents !== null && projected !== null && projected !== lastProjectedCents) {
+        projectedNode.classList.remove("balance-changed");
+        void projectedNode.offsetWidth;
+        projectedNode.classList.add("balance-changed");
+      }
+      lastProjectedCents = projected;
+      $("accountEquation").textContent = current === null ? "Informe o saldo da conta para calcular."
+        : `${money(current)} em conta − ${money(remaining)} das parcelas deste mês = ${money(projected)} livres.`;
       $("accountNote").textContent = projected === null ? "Salve seu saldo para ver quanto sobra ou falta."
-        : projected < 0 ? `Faltam ${money(-projected)} para os pagamentos deste mês. Parcelas futuras não entram nesta previsão.`
-        : `Após os pagamentos deste mês, sobram ${money(projected)}. Parcelas futuras não entram nesta previsão.`;
+        : projected < 0 ? `Faltam ${money(-projected)} para as parcelas deste mês. As futuras não foram descontadas.`
+        : `Ao parcelar uma dívida, só ${monthLabel(monthKey())} é descontado agora. Cada parcela paga reduz o saldo em conta.`;
     }
     function saveAccount() {
       const raw = $("accountInput").value.trim();
@@ -524,7 +541,7 @@
           : (item.paid ? "Dívida quitada" : "Saldo em aberto");
         card.append(element("div", "debt-meta", description));
         const dueNow = item.installments.filter(p => !p.paid && p.dueMonth <= monthKey()).reduce((sum,p) => sum + p.amount,0);
-        card.append(element("div", "debt-meta month-amount", `Neste mês: ${money(dueNow)}`));
+        card.append(element("div", "debt-meta month-amount", `Desconta neste mês: ${money(dueNow)}`));
         if (item.name.toLowerCase().includes("possível desconto") || item.id === "hiper05") card.append(element("div", "debt-note", "Possível desconto"));
         const actions = element("div", "debt-actions");
         if (!item.paid) {
@@ -673,7 +690,7 @@
           const dueAfter = payments.reduce((sum,p) => sum + (p.dueMonth <= thisMonth ? p.amount : 0),0);
           const available = current - monthlyDueCents() + dueBefore - dueAfter;
           const freed = dueBefore - dueAfter;
-          impact.textContent = `Disponível neste mês ao salvar: ${money(available)}.${freed > 0 ? ` Este parcelamento libera ${money(freed)} neste mês.` : ""}`;
+          impact.textContent = `Seu saldo livre ficará em ${money(available)}.${freed > 0 ? ` Parcelar libera ${money(freed)} neste mês.` : " Só a parcela deste mês será descontada agora."}`;
           impact.hidden = false;
         }
         const first = payments[0].amount, last=payments[count-1].amount;
@@ -696,7 +713,10 @@
         state.push(item); history.push({type:"add",item:JSON.parse(JSON.stringify(item))});
         if(history.length>80) history.shift();
       }
-      const saved=saveAll(); render(); closeModal(); if(saved) showToast("Dívida salva com sucesso.");
+      const feedback = count > 1
+        ? `Parcelado em ${count} vezes. Só ${money(installments.filter(p => p.dueMonth <= monthKey()).reduce((sum,p) => sum + p.amount,0))} entra no saldo deste mês.`
+        : "Dívida salva com sucesso.";
+      const saved=saveAll(); render(); closeModal(); if(saved) showToast(feedback);
     }
     function showToast(msg) {
       toast.textContent=msg; toast.classList.add("show"); clearTimeout(toastTimer);
@@ -740,8 +760,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=gastos-20260904", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="gastos-1"')) return;
+          const response = await fetch("./index.html?v=parcelas-gastos-20260904", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="parcelas-gastos-2"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
