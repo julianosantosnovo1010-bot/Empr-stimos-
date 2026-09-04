@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="roxo-escuro-1">
+<html lang="pt-BR" data-app-version="gastos-1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -106,6 +106,24 @@
     .installment-row.is-paid span { color:var(--ok); }
     .installment-row.is-paid button { background:#1f382c; color:var(--ok); }
     .empty-list { grid-column:1/-1; padding:32px 20px; text-align:center; background:var(--surface); border:1px dashed var(--line); border-radius:20px; color:var(--muted); font-size:15px; }
+    .expenses-panel { margin-top:20px; padding:22px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); }
+    .expenses-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+    .expenses-head h2 { margin:0; font-size:22px; letter-spacing:-.03em; }
+    .expenses-head p { margin:5px 0 0; color:var(--muted); font-size:14px; }
+    .expenses-total { flex-shrink:0; text-align:right; }
+    .expenses-total span { display:block; color:var(--muted); font-size:13px; }
+    .expenses-total strong { display:block; margin-top:4px; color:#ffaaa5; font-size:22px; font-variant-numeric:tabular-nums; }
+    .expense-form { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(120px,.7fr) auto; align-items:end; gap:10px; }
+    .expense-form button { min-height:52px; }
+    .expenses-list { display:grid; gap:9px; margin-top:18px; }
+    .expense-item { display:flex; align-items:center; gap:12px; padding:13px 14px; border:1px solid var(--line); border-radius:14px; background:#111113; }
+    .expense-icon { width:38px; height:38px; flex-shrink:0; display:grid; place-items:center; border-radius:12px; color:#ffaaa5; background:#3b2024; font-size:18px; font-weight:750; }
+    .expense-info { flex:1; min-width:0; }
+    .expense-info strong { display:block; overflow-wrap:anywhere; font-size:15px; }
+    .expense-info span { display:block; margin-top:2px; color:var(--muted); font-size:13px; }
+    .expense-value { flex-shrink:0; color:#ffaaa5; font-weight:700; font-variant-numeric:tabular-nums; }
+    .expense-delete { flex-shrink:0; min-width:44px; min-height:44px; padding:8px; border-radius:11px; background:#2c292f; color:var(--soft); font-size:13px; }
+    .expenses-empty { padding:18px; border:1px dashed var(--line); border-radius:14px; color:var(--muted); text-align:center; font-size:14px; }
     .info { padding:18px 20px; margin-top:22px; background:#211c28; color:var(--soft); border-radius:16px; font-size:14px; line-height:1.6; }
     .info strong { color:var(--brand-dark); }
     .footer { text-align:center; font-size:12px; color:var(--muted); margin-top:24px; }
@@ -142,6 +160,8 @@
       .panel { padding:22px; }
       .topbar { margin-bottom:24px; }
       .modal-wrap { align-items:flex-end; }
+      .expense-form { grid-template-columns:minmax(0,1fr) minmax(115px,.65fr); }
+      .expense-form button { grid-column:1/-1; }
     }
     @media (max-width:380px) {
       body { padding-left:14px; padding-right:14px; }
@@ -152,6 +172,12 @@
       .controls .wide { flex-basis:100%; }
       .controls > button:not(.wide) { flex:1; }
       .date-chip { padding:8px 10px; font-size:12px; }
+      .expenses-head { align-items:flex-start; }
+      .expenses-total strong { font-size:19px; }
+      .expense-form { grid-template-columns:1fr; }
+      .expense-form button { grid-column:auto; }
+      .expense-item { gap:9px; padding:12px; }
+      .expense-icon { width:34px; height:34px; }
     }
     @media (prefers-reduced-motion:reduce) {
       html { scroll-behavior:auto; }
@@ -205,6 +231,25 @@
     </section>
 
     </div>
+    <section class="expenses-panel" aria-labelledby="expensesTitle">
+      <div class="expenses-head">
+        <div><h2 id="expensesTitle">Meus gastos</h2><p>Anote uma saída e ela será descontada do saldo da conta.</p></div>
+        <div class="expenses-total"><span>Total gasto</span><strong id="expensesTotal">R$ 0,00</strong></div>
+      </div>
+      <form id="expenseForm" class="expense-form">
+        <div class="field">
+          <label for="expenseName">Descrição do gasto</label>
+          <input id="expenseName" type="text" maxlength="80" placeholder="Ex.: Mercado, transporte..." autocomplete="off" required />
+        </div>
+        <div class="field">
+          <label for="expenseValue">Valor gasto (R$)</label>
+          <input id="expenseValue" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" required />
+        </div>
+        <button class="outline-btn primary-btn" type="submit">Anotar gasto</button>
+      </form>
+      <div id="expensesList" class="expenses-list" aria-live="polite"></div>
+    </section>
+
     <div class="head">
       <h2>Suas dívidas</h2>
       <small>À vista ou parcelado</small>
@@ -279,6 +324,7 @@
     let needsScheduleMigration = false;
     let history = loadHistory();
     let state = loadState();
+    let expenses = savedLedger && Array.isArray(savedLedger.expenses) ? normalizeExpenses(savedLedger.expenses) : [];
     let account = savedLedger ? savedLedger.account : null;
     let balanceFormOpen = account === null;
     let debtFilter = "all";
@@ -339,7 +385,22 @@
       return null;
     }
     function paidCents() { return state.reduce((sum,item) => sum + totals(item).paid, 0); }
-    function accountCents() { return account ? account.amount - (paidCents() - account.paidAtEntry) : null; }
+    function normalizeExpenses(list) {
+      return list.filter(item => item && Number.isSafeInteger(item.amount) && item.amount > 0)
+        .map(item => ({
+          id:String(item.id || ("expense_" + Date.now() + "_" + Math.random().toString(36).slice(2,7))),
+          name:String(item.name || "Gasto").trim().slice(0,80) || "Gasto",
+          amount:item.amount,
+          createdAt:Number.isFinite(Number(item.createdAt)) ? Number(item.createdAt) : Date.now()
+        }));
+    }
+    function expenseTotalCents() { return expenses.reduce((sum,item) => sum + item.amount, 0); }
+    function accountCents() {
+      if (!account) return null;
+      return account.amount
+        - (paidCents() - account.paidAtEntry)
+        - (expenseTotalCents() - (account.expensesAtEntry || 0));
+    }
     function syncBalanceForm() {
       $("accountForm").hidden = !balanceFormOpen;
       $("editBalanceBtn").setAttribute("aria-expanded", String(balanceFormOpen));
@@ -371,7 +432,7 @@
       history.push({type:"account", previous:account ? {...account} : null});
       if(history.length > 80) history.shift();
       // O valor informado é o saldo de agora; pagamentos anteriores não são descontados outra vez.
-      account = {amount, paidAtEntry:paidCents()};
+      account = {amount, paidAtEntry:paidCents(), expensesAtEntry:expenseTotalCents()};
       const saved = saveAll(); render();
       if(saved) { balanceFormOpen=false; syncBalanceForm(); $("editBalanceBtn").focus(); $("accountInput").value=""; showToast("Saldo atualizado. Os próximos pagamentos serão descontados dele."); }
     }
@@ -392,7 +453,7 @@
     }
     function saveAll() {
       // Dívidas e saldo são gravados juntos para manter os valores consistentes.
-      try { localStorage.setItem(LEDGER_KEY, JSON.stringify({version:1, state, history, account})); }
+      try { localStorage.setItem(LEDGER_KEY, JSON.stringify({version:1, state, history, account, expenses})); }
       catch (e) { showToast("Não foi possível salvar. Mantenha esta página aberta e tente novamente."); return false; }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -420,7 +481,31 @@
       if (label) node.setAttribute("aria-label",label);
       node.addEventListener("click", action); return node;
     }
+    function renderExpenses() {
+      const list = $("expensesList");
+      list.replaceChildren();
+      $("expensesTotal").textContent = money(expenseTotalCents());
+      if (!expenses.length) {
+        list.append(element("div", "expenses-empty", "Nenhum gasto anotado por enquanto."));
+        return;
+      }
+      [...expenses].sort((a,b) => b.createdAt - a.createdAt).forEach(item => {
+        const row = element("article", "expense-item");
+        const icon = element("span", "expense-icon", "−");
+        icon.setAttribute("aria-hidden", "true");
+        const info = element("div", "expense-info");
+        info.append(element("strong", "", item.name));
+        const date = new Intl.DateTimeFormat("pt-BR", {
+          day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"
+        }).format(new Date(item.createdAt));
+        info.append(element("span", "", date));
+        row.append(icon, info, element("strong", "expense-value", `− ${money(item.amount)}`));
+        row.append(button("Excluir", "expense-delete", () => deleteExpense(item.id), `Excluir gasto ${item.name}`));
+        list.append(row);
+      });
+    }
     function render() {
+      renderExpenses();
       debtList.replaceChildren();
       state.forEach(item => {
         if ((debtFilter === "open" && item.paid) || (debtFilter === "paid" && !item.paid)) return;
@@ -500,10 +585,43 @@
       if (focused) focused.focus({preventScroll:true});
       if (saved) showToast(payment.paid ? `Pagamento de ${money(payment.amount)} registrado.` : "Pagamento desmarcado.");
     }
+    function addExpense() {
+      const name = $("expenseName").value.trim();
+      const amount = readValue($("expenseValue").value);
+      if (!name) { showToast("Digite a descrição do gasto."); $("expenseName").focus(); return; }
+      if (!Number.isSafeInteger(amount) || amount < 1) { showToast("Informe um valor de gasto válido."); $("expenseValue").focus(); return; }
+      const item = {
+        id:"expense_" + Date.now() + "_" + Math.random().toString(36).slice(2,7),
+        name:name.slice(0,80), amount, createdAt:Date.now()
+      };
+      expenses.push(item);
+      history.push({type:"expense-add", id:item.id});
+      if (history.length > 80) history.shift();
+      const saved = saveAll(); render();
+      if (saved) {
+        $("expenseName").value=""; $("expenseValue").value=""; $("expenseName").focus();
+        showToast(`${item.name}: ${money(item.amount)} descontados do saldo.`);
+      }
+    }
+    function deleteExpense(id) {
+      const index = expenses.findIndex(item => item.id === id);
+      if (index < 0) return;
+      const item = expenses[index];
+      history.push({type:"expense-delete", item:{...item}, index});
+      if (history.length > 80) history.shift();
+      expenses.splice(index,1);
+      const saved=saveAll(); render();
+      if(saved) showToast("Gasto excluído e valor devolvido ao saldo.");
+    }
     function undoLast() {
       const last = history.pop(); if (!last) return;
       const index = state.findIndex(item => item.id === last.id);
       if (last.type === "account") account = last.previous ? {...last.previous} : null;
+      else if (last.type === "expense-add") expenses = expenses.filter(item => item.id !== last.id);
+      else if (last.type === "expense-delete") {
+        const restored = normalizeExpenses([last.item])[0];
+        if (restored) expenses.splice(Math.min(last.index, expenses.length), 0, restored);
+      }
       else if (last.type === "replace" && index >= 0) state[index] = normalizeState([last.previous])[0];
       else if (last.type === "toggle" && index >= 0) {
         state[index].installments.forEach(p => p.paid = !!last.previous);
@@ -515,7 +633,7 @@
       if (!confirm("Restaurar a lista inicial? Isso remove dívidas adicionadas, parcelamentos e pagamentos registrados. O saldo atual da conta será mantido.")) return;
       const currentAccount = accountCents();
       state = normalizeState(seed.map(item => ({...item, paid:false})));
-      if (currentAccount !== null) account = {amount:currentAccount, paidAtEntry:0};
+      if (currentAccount !== null) account = {amount:currentAccount, paidAtEntry:0, expensesAtEntry:expenseTotalCents()};
       history=[]; expanded.clear(); const saved=saveAll(); render(); if(saved) showToast("Lista restaurada.");
     }
     function openModal(id = null) {
@@ -592,6 +710,7 @@
       if (balanceFormOpen) $("accountInput").focus();
     });
     $("accountForm").addEventListener("submit", e => { e.preventDefault(); saveAccount(); });
+    $("expenseForm").addEventListener("submit", e => { e.preventDefault(); addExpense(); });
     $("addBtn").addEventListener("click",()=>openModal());
     $("cancelBtn").addEventListener("click",closeModal);
     $("saveBtn").addEventListener("click",saveDebt);
@@ -621,8 +740,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=roxo-escuro-20260903", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="roxo-escuro-1"')) return;
+          const response = await fetch("./index.html?v=gastos-20260904", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="gastos-1"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
