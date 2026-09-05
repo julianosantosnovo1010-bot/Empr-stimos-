@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="parcelas-gastos-2">
+<html lang="pt-BR" data-app-version="receitas-futuras-1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -128,6 +128,26 @@
     .expense-value { flex-shrink:0; color:#ffaaa5; font-weight:700; font-variant-numeric:tabular-nums; }
     .expense-delete { flex-shrink:0; min-width:44px; min-height:44px; padding:8px; border-radius:11px; background:#2c292f; color:var(--soft); font-size:13px; }
     .expenses-empty { padding:18px; border:1px dashed var(--line); border-radius:14px; color:var(--muted); text-align:center; font-size:14px; }
+    .income-panel { margin-top:20px; padding:22px; border:1px solid #294b39; border-radius:var(--radius); background:linear-gradient(145deg,#17211c 0%,var(--surface) 56%); box-shadow:var(--shadow); }
+    .income-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+    .income-head h2 { margin:0; font-size:22px; letter-spacing:-.03em; }
+    .income-head p { margin:5px 0 0; color:var(--muted); font-size:14px; }
+    .income-total { flex-shrink:0; text-align:right; }
+    .income-total span { display:block; color:var(--muted); font-size:13px; }
+    .income-total strong { display:block; margin-top:4px; color:var(--ok); font-size:22px; font-variant-numeric:tabular-nums; }
+    .income-projection { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px; padding:13px 15px; border-radius:14px; background:#1f382c; color:var(--ok); }
+    .income-projection span { font-size:14px; line-height:1.4; }
+    .income-projection strong { flex-shrink:0; font-size:19px; font-variant-numeric:tabular-nums; }
+    .income-form { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(110px,.65fr) minmax(145px,.72fr) auto; align-items:end; gap:10px; }
+    .income-form button { min-height:52px; background:#1f6b48; }
+    .income-list { display:grid; gap:9px; margin-top:18px; }
+    .income-item { display:flex; align-items:center; gap:12px; padding:13px 14px; border:1px solid #294b39; border-radius:14px; background:#111713; }
+    .income-icon { width:38px; height:38px; flex-shrink:0; display:grid; place-items:center; border-radius:12px; color:var(--ok); background:#1f382c; font-size:18px; font-weight:750; }
+    .income-info { flex:1; min-width:0; }
+    .income-info strong { display:block; overflow-wrap:anywhere; font-size:15px; }
+    .income-info span { display:block; margin-top:2px; color:var(--muted); font-size:13px; }
+    .income-value { flex-shrink:0; color:var(--ok); font-weight:700; font-variant-numeric:tabular-nums; }
+    .income-delete { flex-shrink:0; min-width:44px; min-height:44px; padding:8px; border-radius:11px; background:#26302a; color:var(--soft); font-size:13px; }
     .info { padding:18px 20px; margin-top:22px; background:#211c28; color:var(--soft); border-radius:16px; font-size:14px; line-height:1.6; }
     .info strong { color:var(--brand-dark); }
     .footer { text-align:center; font-size:12px; color:var(--muted); margin-top:24px; }
@@ -167,6 +187,8 @@
       .modal-wrap { align-items:flex-end; }
       .expense-form { grid-template-columns:minmax(0,1fr) minmax(115px,.65fr); }
       .expense-form button { grid-column:1/-1; }
+      .income-form { grid-template-columns:minmax(0,1fr) minmax(120px,.7fr); }
+      .income-form .income-date-field,.income-form button { grid-column:1/-1; }
     }
     @media (max-width:380px) {
       body { padding-left:14px; padding-right:14px; }
@@ -179,10 +201,17 @@
       .date-chip { padding:8px 10px; font-size:12px; }
       .expenses-head { align-items:flex-start; }
       .expenses-total strong { font-size:19px; }
+      .income-head { align-items:flex-start; }
+      .income-total strong { font-size:19px; }
+      .income-projection { align-items:flex-start; flex-direction:column; }
       .expense-form { grid-template-columns:1fr; }
       .expense-form button { grid-column:auto; }
       .expense-item { gap:9px; padding:12px; }
       .expense-icon { width:34px; height:34px; }
+      .income-form { grid-template-columns:1fr; }
+      .income-form .income-date-field,.income-form button { grid-column:auto; }
+      .income-item { gap:9px; padding:12px; }
+      .income-icon { width:34px; height:34px; }
     }
     @media (prefers-reduced-motion:reduce) {
       html { scroll-behavior:auto; }
@@ -237,6 +266,32 @@
     </section>
 
     </div>
+    <section class="income-panel" aria-labelledby="incomeTitle">
+      <div class="income-head">
+        <div><h2 id="incomeTitle">Receitas futuras</h2><p>Programe o dinheiro que vai entrar na sua conta.</p></div>
+        <div class="income-total"><span>A receber</span><strong id="incomePendingTotal">R$ 0,00</strong></div>
+      </div>
+      <div class="income-projection" aria-live="polite">
+        <span>Saldo em conta + receitas previstas</span><strong id="incomeProjectedBalance">Não informado</strong>
+      </div>
+      <form id="incomeForm" class="income-form">
+        <div class="field">
+          <label for="incomeName">Descrição da receita</label>
+          <input id="incomeName" type="text" maxlength="80" placeholder="Ex.: Salário, comissão..." autocomplete="off" required />
+        </div>
+        <div class="field">
+          <label for="incomeValue">Valor (R$)</label>
+          <input id="incomeValue" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" required />
+        </div>
+        <div class="field income-date-field">
+          <label for="incomeDate">Data de entrada</label>
+          <input id="incomeDate" type="date" required />
+        </div>
+        <button class="outline-btn primary-btn" type="submit">Adicionar receita</button>
+      </form>
+      <div id="incomeList" class="income-list" aria-live="polite"></div>
+    </section>
+
     <section class="expenses-panel" aria-labelledby="expensesTitle">
       <div class="expenses-head">
         <div><h2 id="expensesTitle">Meus gastos</h2><p>Anote uma saída e ela será descontada do saldo da conta.</p></div>
@@ -331,6 +386,7 @@
     let history = loadHistory();
     let state = loadState();
     let expenses = savedLedger && Array.isArray(savedLedger.expenses) ? normalizeExpenses(savedLedger.expenses) : [];
+    let incomes = savedLedger && Array.isArray(savedLedger.incomes) ? normalizeIncomes(savedLedger.incomes) : [];
     let account = savedLedger ? savedLedger.account : null;
     let balanceFormOpen = account === null;
     let debtFilter = "all";
@@ -350,6 +406,14 @@
     }
     function monthKey(date = new Date()) {
       return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`;
+    }
+    function dateKey(date = new Date()) {
+      return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+    }
+    function validDate(value) { return typeof value === "string" && /^(19|20|21)\d{2}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(value); }
+    function dateLabel(value) {
+      const [year,month,day] = value.split("-").map(Number);
+      return new Intl.DateTimeFormat("pt-BR", {day:"2-digit",month:"short",year:"numeric"}).format(new Date(year,month-1,day,12));
     }
     function validMonth(value) { return typeof value === "string" && /^(19|20|21)\d{2}-(0[1-9]|1[0-2])$/.test(value); }
     function shiftMonth(value, offset) {
@@ -401,12 +465,33 @@
           createdAt:Number.isFinite(Number(item.createdAt)) ? Number(item.createdAt) : Date.now()
         }));
     }
+    function normalizeIncomes(list) {
+      return list.filter(item => item && Number.isSafeInteger(item.amount) && item.amount > 0 && validDate(item.date))
+        .map(item => ({
+          id:String(item.id || ("income_" + Date.now() + "_" + Math.random().toString(36).slice(2,7))),
+          name:String(item.name || "Receita").trim().slice(0,80) || "Receita",
+          amount:item.amount, date:item.date,
+          createdAt:Number.isFinite(Number(item.createdAt)) ? Number(item.createdAt) : Date.now()
+        }));
+    }
     function expenseTotalCents() { return expenses.reduce((sum,item) => sum + item.amount, 0); }
+    function receivedIncomeCents() { return incomes.reduce((sum,item) => sum + (item.date <= dateKey() ? item.amount : 0), 0); }
+    function pendingIncomeCents() { return incomes.reduce((sum,item) => sum + (item.date > dateKey() ? item.amount : 0), 0); }
+    function receivedIncomeIds() { return incomes.filter(item => item.date <= dateKey()).map(item => item.id); }
+    function incomeBalanceDeltaCents() {
+      if (!account) return 0;
+      if (Array.isArray(account.incomeIdsAtEntry)) {
+        const baseline = new Set(account.incomeIdsAtEntry);
+        return incomes.reduce((sum,item) => sum + (item.date <= dateKey() && !baseline.has(item.id) ? item.amount : 0), 0);
+      }
+      return receivedIncomeCents() - (account.incomeAtEntry || 0);
+    }
     function accountCents() {
       if (!account) return null;
       return account.amount
         - (paidCents() - account.paidAtEntry)
-        - (expenseTotalCents() - (account.expensesAtEntry || 0));
+        - (expenseTotalCents() - (account.expensesAtEntry || 0))
+        + incomeBalanceDeltaCents();
     }
     function syncBalanceForm() {
       $("accountForm").hidden = !balanceFormOpen;
@@ -449,7 +534,7 @@
       history.push({type:"account", previous:account ? {...account} : null});
       if(history.length > 80) history.shift();
       // O valor informado é o saldo de agora; pagamentos anteriores não são descontados outra vez.
-      account = {amount, paidAtEntry:paidCents(), expensesAtEntry:expenseTotalCents()};
+      account = {amount, paidAtEntry:paidCents(), expensesAtEntry:expenseTotalCents(), incomeAtEntry:receivedIncomeCents(), incomeIdsAtEntry:receivedIncomeIds()};
       const saved = saveAll(); render();
       if(saved) { balanceFormOpen=false; syncBalanceForm(); $("editBalanceBtn").focus(); $("accountInput").value=""; showToast("Saldo atualizado. Os próximos pagamentos serão descontados dele."); }
     }
@@ -470,7 +555,7 @@
     }
     function saveAll() {
       // Dívidas e saldo são gravados juntos para manter os valores consistentes.
-      try { localStorage.setItem(LEDGER_KEY, JSON.stringify({version:1, state, history, account, expenses})); }
+      try { localStorage.setItem(LEDGER_KEY, JSON.stringify({version:1, state, history, account, expenses, incomes})); }
       catch (e) { showToast("Não foi possível salvar. Mantenha esta página aberta e tente novamente."); return false; }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -498,6 +583,30 @@
       if (label) node.setAttribute("aria-label",label);
       node.addEventListener("click", action); return node;
     }
+    function renderIncomes() {
+      const list = $("incomeList");
+      const pending = pendingIncomeCents();
+      const current = accountCents();
+      list.replaceChildren();
+      $("incomePendingTotal").textContent = money(pending);
+      $("incomeProjectedBalance").textContent = current === null ? "Informe seu saldo" : money(current + pending);
+      if (!incomes.length) {
+        list.append(element("div", "expenses-empty", "Nenhuma receita programada por enquanto."));
+        return;
+      }
+      [...incomes].sort((a,b) => a.date.localeCompare(b.date) || a.createdAt-b.createdAt).forEach(item => {
+        const received = item.date <= dateKey();
+        const row = element("article", "income-item");
+        const icon = element("span", "income-icon", received ? "✓" : "+");
+        icon.setAttribute("aria-hidden", "true");
+        const info = element("div", "income-info");
+        info.append(element("strong", "", item.name));
+        info.append(element("span", "", received ? `${dateLabel(item.date)} • Somada ao saldo` : `Entra em ${dateLabel(item.date)}`));
+        row.append(icon, info, element("strong", "income-value", `+ ${money(item.amount)}`));
+        row.append(button("Excluir", "income-delete", () => deleteIncome(item.id), `Excluir receita ${item.name}`));
+        list.append(row);
+      });
+    }
     function renderExpenses() {
       const list = $("expensesList");
       list.replaceChildren();
@@ -522,6 +631,7 @@
       });
     }
     function render() {
+      renderIncomes();
       renderExpenses();
       debtList.replaceChildren();
       state.forEach(item => {
@@ -630,6 +740,36 @@
       const saved=saveAll(); render();
       if(saved) showToast("Gasto excluído e valor devolvido ao saldo.");
     }
+    function addIncome() {
+      const name = $("incomeName").value.trim();
+      const amount = readValue($("incomeValue").value);
+      const date = $("incomeDate").value;
+      if (!name) { showToast("Digite a descrição da receita."); $("incomeName").focus(); return; }
+      if (!Number.isSafeInteger(amount) || amount < 1) { showToast("Informe um valor de receita válido."); $("incomeValue").focus(); return; }
+      if (!validDate(date) || date < dateKey()) { showToast("Escolha hoje ou uma data futura."); $("incomeDate").focus(); return; }
+      const item = {
+        id:"income_" + Date.now() + "_" + Math.random().toString(36).slice(2,7),
+        name:name.slice(0,80), amount, date, createdAt:Date.now()
+      };
+      incomes.push(item);
+      history.push({type:"income-add", id:item.id});
+      if (history.length > 80) history.shift();
+      const saved=saveAll(); render();
+      if (saved) {
+        $("incomeName").value=""; $("incomeValue").value=""; $("incomeDate").value=dateKey(); $("incomeName").focus();
+        showToast(date === dateKey() ? `${money(amount)} somados ao saldo.` : `Receita de ${money(amount)} programada para ${dateLabel(date)}.`);
+      }
+    }
+    function deleteIncome(id) {
+      const index = incomes.findIndex(item => item.id === id);
+      if (index < 0) return;
+      const item = incomes[index];
+      history.push({type:"income-delete", item:{...item}, index});
+      if (history.length > 80) history.shift();
+      incomes.splice(index,1);
+      const saved=saveAll(); render();
+      if(saved) showToast("Receita excluída e saldo recalculado.");
+    }
     function undoLast() {
       const last = history.pop(); if (!last) return;
       const index = state.findIndex(item => item.id === last.id);
@@ -638,6 +778,11 @@
       else if (last.type === "expense-delete") {
         const restored = normalizeExpenses([last.item])[0];
         if (restored) expenses.splice(Math.min(last.index, expenses.length), 0, restored);
+      }
+      else if (last.type === "income-add") incomes = incomes.filter(item => item.id !== last.id);
+      else if (last.type === "income-delete") {
+        const restored = normalizeIncomes([last.item])[0];
+        if (restored) incomes.splice(Math.min(last.index, incomes.length), 0, restored);
       }
       else if (last.type === "replace" && index >= 0) state[index] = normalizeState([last.previous])[0];
       else if (last.type === "toggle" && index >= 0) {
@@ -650,7 +795,7 @@
       if (!confirm("Restaurar a lista inicial? Isso remove dívidas adicionadas, parcelamentos e pagamentos registrados. O saldo atual da conta será mantido.")) return;
       const currentAccount = accountCents();
       state = normalizeState(seed.map(item => ({...item, paid:false})));
-      if (currentAccount !== null) account = {amount:currentAccount, paidAtEntry:0, expensesAtEntry:expenseTotalCents()};
+      if (currentAccount !== null) account = {amount:currentAccount, paidAtEntry:0, expensesAtEntry:expenseTotalCents(), incomeAtEntry:receivedIncomeCents(), incomeIdsAtEntry:receivedIncomeIds()};
       history=[]; expanded.clear(); const saved=saveAll(); render(); if(saved) showToast("Lista restaurada.");
     }
     function openModal(id = null) {
@@ -730,6 +875,7 @@
       if (balanceFormOpen) $("accountInput").focus();
     });
     $("accountForm").addEventListener("submit", e => { e.preventDefault(); saveAccount(); });
+    $("incomeForm").addEventListener("submit", e => { e.preventDefault(); addIncome(); });
     $("expenseForm").addEventListener("submit", e => { e.preventDefault(); addExpense(); });
     $("addBtn").addEventListener("click",()=>openModal());
     $("cancelBtn").addEventListener("click",closeModal);
@@ -752,6 +898,8 @@
         else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
       }
     });
+    $("incomeDate").min = dateKey();
+    $("incomeDate").value = dateKey();
     render();
     if (needsScheduleMigration) saveAll();
     if("serviceWorker" in navigator && location.protocol.startsWith("http")) {
@@ -760,8 +908,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=parcelas-gastos-20260904", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="parcelas-gastos-2"')) return;
+          const response = await fetch("./index.html?v=receitas-futuras-20260905", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="receitas-futuras-1"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
