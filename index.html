@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="receitas-futuras-1">
+<html lang="pt-BR" data-app-version="lista-excel-3">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -89,7 +89,7 @@
     .debt { min-width:0; padding:20px; border-radius:20px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow); transition:box-shadow .2s,border-color .2s; }
     .debt-heading { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
     .debt-initials { width:40px; height:40px; flex-shrink:0; border-radius:13px; background:var(--tint); color:var(--accent); display:grid; place-items:center; font-size:14px; font-weight:750; }
-    .debt-name { font-weight:700; font-size:17px; line-height:1.35; letter-spacing:-.02em; overflow-wrap:anywhere; min-width:0; flex:1; }
+    .debt-name { font-weight:700; font-size:17px; line-height:1.35; letter-spacing:-.02em; overflow-wrap:break-word; word-break:normal; min-width:0; flex:1; }
     .debt-value { font-size:28px; font-weight:750; letter-spacing:-.035em; line-height:1.2; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
     .debt-meta { color:var(--muted); font-size:14px; line-height:1.5; margin-top:7px; }
     .debt-meta.month-amount { display:inline-block; background:#321346; color:var(--brand-dark); padding:6px 10px; border-radius:9px; font-weight:600; margin-top:12px; }
@@ -120,13 +120,10 @@
     .expense-form { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(120px,.7fr) auto; align-items:end; gap:10px; }
     .expense-form button { min-height:52px; }
     .expenses-list { display:grid; gap:9px; margin-top:18px; }
-    .expense-item { display:flex; align-items:center; gap:12px; padding:13px 14px; border:1px solid var(--line); border-radius:14px; background:#111113; }
+    .expense-item { display:grid; grid-template-columns:minmax(70px,1fr) 76px max-content 40px; align-items:center; gap:8px; min-width:0; padding:10px 11px; border:1px solid var(--line); border-radius:12px; background:#111113; }
     .expense-icon { width:38px; height:38px; flex-shrink:0; display:grid; place-items:center; border-radius:12px; color:#ffaaa5; background:#3b2024; font-size:18px; font-weight:750; }
-    .expense-info { flex:1; min-width:0; }
-    .expense-info strong { display:block; overflow-wrap:anywhere; font-size:15px; }
-    .expense-info span { display:block; margin-top:2px; color:var(--muted); font-size:13px; }
-    .expense-value { flex-shrink:0; color:#ffaaa5; font-weight:700; font-variant-numeric:tabular-nums; }
-    .expense-delete { flex-shrink:0; min-width:44px; min-height:44px; padding:8px; border-radius:11px; background:#2c292f; color:var(--soft); font-size:13px; }
+    .expense-value { min-width:max-content; color:#ffaaa5; font-size:15px; font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .expense-delete { width:40px; min-width:40px; min-height:40px; padding:0; border-radius:10px; background:#2c292f; color:var(--soft); font-size:22px; line-height:1; }
     .expenses-empty { padding:18px; border:1px dashed var(--line); border-radius:14px; color:var(--muted); text-align:center; font-size:14px; }
     .income-panel { margin-top:20px; padding:22px; border:1px solid #294b39; border-radius:var(--radius); background:linear-gradient(145deg,#17211c 0%,var(--surface) 56%); box-shadow:var(--shadow); }
     .income-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
@@ -141,13 +138,12 @@
     .income-form { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(110px,.65fr) minmax(145px,.72fr) auto; align-items:end; gap:10px; }
     .income-form button { min-height:52px; background:#1f6b48; }
     .income-list { display:grid; gap:9px; margin-top:18px; }
-    .income-item { display:flex; align-items:center; gap:12px; padding:13px 14px; border:1px solid #294b39; border-radius:14px; background:#111713; }
+    .income-item { display:grid; grid-template-columns:minmax(70px,1fr) 76px max-content 40px; align-items:center; gap:8px; min-width:0; padding:10px 11px; border:1px solid #294b39; border-radius:12px; background:#111713; }
     .income-icon { width:38px; height:38px; flex-shrink:0; display:grid; place-items:center; border-radius:12px; color:var(--ok); background:#1f382c; font-size:18px; font-weight:750; }
-    .income-info { flex:1; min-width:0; }
-    .income-info strong { display:block; overflow-wrap:anywhere; font-size:15px; }
-    .income-info span { display:block; margin-top:2px; color:var(--muted); font-size:13px; }
-    .income-value { flex-shrink:0; color:var(--ok); font-weight:700; font-variant-numeric:tabular-nums; }
-    .income-delete { flex-shrink:0; min-width:44px; min-height:44px; padding:8px; border-radius:11px; background:#26302a; color:var(--soft); font-size:13px; }
+    .income-value { min-width:max-content; color:var(--ok); font-size:15px; font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .income-delete { width:40px; min-width:40px; min-height:40px; padding:0; border-radius:10px; background:#26302a; color:var(--soft); font-size:22px; line-height:1; }
+    .entry-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; overflow-wrap:normal; word-break:normal; font-size:15px; }
+    .entry-date { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:13px; text-align:center; font-variant-numeric:tabular-nums; }
     .info { padding:18px 20px; margin-top:22px; background:#211c28; color:var(--soft); border-radius:16px; font-size:14px; line-height:1.6; }
     .info strong { color:var(--brand-dark); }
     .footer { text-align:center; font-size:12px; color:var(--muted); margin-top:24px; }
@@ -206,12 +202,14 @@
       .income-projection { align-items:flex-start; flex-direction:column; }
       .expense-form { grid-template-columns:1fr; }
       .expense-form button { grid-column:auto; }
-      .expense-item { gap:9px; padding:12px; }
-      .expense-icon { width:34px; height:34px; }
+      .expense-item { grid-template-columns:minmax(56px,1fr) 62px max-content 36px; gap:6px; padding:9px 8px; }
       .income-form { grid-template-columns:1fr; }
       .income-form .income-date-field,.income-form button { grid-column:auto; }
-      .income-item { gap:9px; padding:12px; }
-      .income-icon { width:34px; height:34px; }
+      .income-item { grid-template-columns:minmax(56px,1fr) 62px max-content 36px; gap:6px; padding:9px 8px; }
+      .entry-name { font-size:14px; }
+      .entry-date { font-size:12px; }
+      .income-value,.expense-value { font-size:13px; }
+      .income-delete,.expense-delete { width:36px; min-width:36px; min-height:36px; }
     }
     @media (prefers-reduced-motion:reduce) {
       html { scroll-behavior:auto; }
@@ -415,6 +413,10 @@
       const [year,month,day] = value.split("-").map(Number);
       return new Intl.DateTimeFormat("pt-BR", {day:"2-digit",month:"short",year:"numeric"}).format(new Date(year,month-1,day,12));
     }
+    function compactDateLabel(value) {
+      const [year,month,day] = value.split("-").map(Number);
+      return new Intl.DateTimeFormat("pt-BR", {day:"2-digit",month:"2-digit",year:"2-digit"}).format(new Date(year,month-1,day,12));
+    }
     function validMonth(value) { return typeof value === "string" && /^(19|20|21)\d{2}-(0[1-9]|1[0-2])$/.test(value); }
     function shiftMonth(value, offset) {
       const [year, month] = value.split("-").map(Number);
@@ -596,14 +598,15 @@
       }
       [...incomes].sort((a,b) => a.date.localeCompare(b.date) || a.createdAt-b.createdAt).forEach(item => {
         const received = item.date <= dateKey();
-        const row = element("article", "income-item");
-        const icon = element("span", "income-icon", received ? "✓" : "+");
-        icon.setAttribute("aria-hidden", "true");
-        const info = element("div", "income-info");
-        info.append(element("strong", "", item.name));
-        info.append(element("span", "", received ? `${dateLabel(item.date)} • Somada ao saldo` : `Entra em ${dateLabel(item.date)}`));
-        row.append(icon, info, element("strong", "income-value", `+ ${money(item.amount)}`));
-        row.append(button("Excluir", "income-delete", () => deleteIncome(item.id), `Excluir receita ${item.name}`));
+        const row = element("article", "income-item" + (received ? " received" : " pending"));
+        const name = element("strong", "entry-name", item.name);
+        name.title = item.name;
+        row.append(
+          name,
+          element("span", "entry-date", compactDateLabel(item.date)),
+          element("strong", "income-value", `+${money(item.amount)}`),
+          button("×", "income-delete", () => deleteIncome(item.id), `Excluir receita ${item.name}`)
+        );
         list.append(row);
       });
     }
@@ -617,16 +620,17 @@
       }
       [...expenses].sort((a,b) => b.createdAt - a.createdAt).forEach(item => {
         const row = element("article", "expense-item");
-        const icon = element("span", "expense-icon", "−");
-        icon.setAttribute("aria-hidden", "true");
-        const info = element("div", "expense-info");
-        info.append(element("strong", "", item.name));
+        const name = element("strong", "entry-name", item.name);
+        name.title = item.name;
         const date = new Intl.DateTimeFormat("pt-BR", {
-          day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"
+          day:"2-digit", month:"2-digit", year:"2-digit"
         }).format(new Date(item.createdAt));
-        info.append(element("span", "", date));
-        row.append(icon, info, element("strong", "expense-value", `− ${money(item.amount)}`));
-        row.append(button("Excluir", "expense-delete", () => deleteExpense(item.id), `Excluir gasto ${item.name}`));
+        row.append(
+          name,
+          element("span", "entry-date", date),
+          element("strong", "expense-value", `−${money(item.amount)}`),
+          button("×", "expense-delete", () => deleteExpense(item.id), `Excluir gasto ${item.name}`)
+        );
         list.append(row);
       });
     }
@@ -908,8 +912,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=receitas-futuras-20260905", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="receitas-futuras-1"')) return;
+          const response = await fetch("./index.html?v=lista-excel-20260907", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="lista-excel-3"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
