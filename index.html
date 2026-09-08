@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-app-version="lista-excel-3">
+<html lang="pt-BR" data-app-version="multiplas-contas-2">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -49,7 +49,7 @@
     .available-highlight strong.negative { color:#ffe0ce; }
     .available-highlight p { margin:14px 0 0; font-size:14px; line-height:1.5; color:#f0dfff; }
     .available-highlight strong.balance-changed { animation:balance-pop .42s ease-out; }
-    .account-form { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:10px; margin:18px 20px 0; }
+    .account-form { display:grid; grid-template-columns:minmax(0,1fr) minmax(125px,.7fr) auto; align-items:end; gap:10px; margin:18px 20px 0; }
     .account-form button { min-height:52px; }
     .account-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding:22px; }
     .account-stats .stat { min-width:0; padding:0; background:none; border:0; }
@@ -61,6 +61,15 @@
     .future-installments { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 20px 18px; padding:12px 14px; border-radius:13px; background:var(--tint); color:var(--brand-dark); }
     .future-installments span { font-size:13px; line-height:1.4; }
     .future-installments strong { flex-shrink:0; font-size:16px; font-variant-numeric:tabular-nums; }
+    .wallets-block { margin:18px 20px 0; }
+    .wallets-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:9px; }
+    .wallets-heading strong { font-size:15px; }
+    .add-wallet { min-height:40px; padding:8px 11px; border-radius:11px; background:var(--tint); color:var(--brand-dark); font-size:13px; font-weight:700; }
+    .wallets-list { display:grid; gap:8px; }
+    .wallet-row { display:grid; grid-template-columns:minmax(0,1fr) auto 40px; align-items:center; gap:9px; padding:10px 11px; border:1px solid var(--line); border-radius:13px; background:#111113; }
+    .wallet-row span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; font-weight:650; }
+    .wallet-row strong { color:var(--soft); font-size:15px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .wallet-row button { width:40px; min-height:40px; padding:0; border-radius:10px; background:#2c292f; color:var(--brand-dark); font-size:17px; }
     .panel { padding:24px; }
     .panel .total { margin:8px 0 6px; font-size:clamp(28px,7.5vw,38px); font-weight:750; line-height:1.2; letter-spacing:-.04em; overflow-wrap:anywhere; }
     .debt-total-note { font-size:13px; color:var(--muted); margin:0 0 20px; }
@@ -230,20 +239,28 @@
     <section class="account-panel" aria-labelledby="accountTitle">
       <div class="account-header"><h2 id="accountTitle">Meu saldo</h2><button id="editBalanceBtn" class="edit-balance" type="button" aria-controls="accountForm" aria-expanded="true">Atualizar saldo</button></div>
       <div class="available-highlight" aria-live="polite" aria-atomic="true">
-        <div class="eyebrow">Saldo livre neste mês</div>
-        <strong id="accountProjected">Não informado</strong>
-        <p id="accountEquation">Ao parcelar, somente a parcela deste mês entra no cálculo.</p>
+        <div class="eyebrow">Saldo total geral</div>
+        <strong id="accountCurrent">Não informado</strong>
+        <p id="accountEquation">A soma de todas as suas contas aparece aqui.</p>
+      </div>
+      <div class="wallets-block">
+        <div class="wallets-heading"><strong>Minhas contas · controle manual</strong><button id="addWalletBtn" class="add-wallet" type="button">+ Adicionar conta</button></div>
+        <div id="walletsList" class="wallets-list" aria-live="polite"></div>
       </div>
       <form id="accountForm" class="account-form">
         <div class="field">
-          <label for="accountInput">Seu saldo atual (R$)</label>
+          <label for="accountNameInput">Nome da conta</label>
+          <input id="accountNameInput" type="text" maxlength="40" placeholder="Ex.: Nubank" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="accountInput">Saldo desta conta (R$)</label>
           <input id="accountInput" type="text" inputmode="decimal" placeholder="Ex.: 1.500,00" autocomplete="off" required />
         </div>
-        <button class="outline-btn primary-btn" type="submit">Salvar saldo</button>
+        <button class="outline-btn primary-btn" type="submit">Salvar conta</button>
       </form>
       <div class="account-stats" aria-live="polite" aria-atomic="true">
         <div class="stat"><span id="monthLabel">Parcelas deste mês</span><strong id="monthlyDue">R$ 0,00</strong></div>
-        <div class="stat"><span>Saldo em conta agora</span><strong id="accountCurrent">Não informado</strong></div>
+        <div class="stat"><span>Saldo livre neste mês</span><strong id="accountProjected">Não informado</strong></div>
 
       </div>
       <div class="future-installments"><span>Ficou para os próximos meses</span><strong id="futureDue">R$ 0,00</strong></div>
@@ -386,6 +403,10 @@
     let expenses = savedLedger && Array.isArray(savedLedger.expenses) ? normalizeExpenses(savedLedger.expenses) : [];
     let incomes = savedLedger && Array.isArray(savedLedger.incomes) ? normalizeIncomes(savedLedger.incomes) : [];
     let account = savedLedger ? savedLedger.account : null;
+    const walletSetup = loadWalletSetup();
+    let wallets = walletSetup.wallets;
+    let walletSyncedTotal = walletSetup.syncedTotal;
+    let editingWalletId = wallets[0].id;
     let balanceFormOpen = account === null;
     let debtFilter = "all";
     let editingId = null;
@@ -495,14 +516,77 @@
         - (expenseTotalCents() - (account.expensesAtEntry || 0))
         + incomeBalanceDeltaCents();
     }
+    function normalizeWallets(list) {
+      return list.filter(item => item && Number.isSafeInteger(item.amount))
+        .map(item => ({
+          id:String(item.id || ("wallet_" + Date.now() + "_" + Math.random().toString(36).slice(2,7))),
+          name:String(item.name || "Conta").trim().slice(0,40) || "Conta",
+          amount:item.amount
+        }));
+    }
+    function loadWalletSetup() {
+      if (savedLedger && Array.isArray(savedLedger.wallets) && savedLedger.wallets.length) {
+        const normalized = normalizeWallets(savedLedger.wallets);
+        if (normalized.length) return {
+          wallets:normalized,
+          syncedTotal:Number.isSafeInteger(savedLedger.walletSyncedTotal) ? savedLedger.walletSyncedTotal : accountCents()
+        };
+      }
+      const current = accountCents();
+      return {
+        wallets:[
+          {id:"wallet_main",name:"Conta principal",amount:current === null ? 0 : current},
+          {id:"wallet_2",name:"Conta 2",amount:0},
+          {id:"wallet_3",name:"Conta 3",amount:0}
+        ],
+        syncedTotal:current
+      };
+    }
+    function syncWallets() {
+      const current = accountCents();
+      if (current === null) return;
+      walletSyncedTotal = current;
+    }
     function syncBalanceForm() {
       $("accountForm").hidden = !balanceFormOpen;
       $("editBalanceBtn").setAttribute("aria-expanded", String(balanceFormOpen));
-      $("editBalanceBtn").textContent = balanceFormOpen ? "Fechar" : "Atualizar saldo";
+      $("editBalanceBtn").textContent = balanceFormOpen ? "Fechar" : "Gerenciar contas";
+    }
+    function openWalletEditor(id) {
+      const wallet = wallets.find(item => item.id === id) || wallets[0];
+      editingWalletId = wallet.id;
+      balanceFormOpen = true;
+      $("accountNameInput").value = wallet.name;
+      $("accountInput").value = (wallet.amount / 100).toFixed(2).replace(".",",");
+      syncBalanceForm();
+      $("accountNameInput").focus();
+    }
+    function renderWallets() {
+      const list = $("walletsList");
+      list.replaceChildren();
+      wallets.forEach(wallet => {
+        const row = element("div", "wallet-row");
+        row.append(
+          element("span", "", wallet.name),
+          element("strong", "", money(wallet.amount)),
+          button("✎", "", () => openWalletEditor(wallet.id), `Editar ${wallet.name}`)
+        );
+        list.append(row);
+      });
+    }
+    function addWallet() {
+      syncWallets();
+      history.push({type:"wallet-state", previousAccount:account ? {...account} : null, previousWallets:wallets.map(item => ({...item})), previousSynced:walletSyncedTotal});
+      if (history.length > 80) history.shift();
+      const wallet = {id:"wallet_" + Date.now() + "_" + Math.random().toString(36).slice(2,7), name:`Conta ${wallets.length+1}`, amount:0};
+      wallets.push(wallet);
+      saveAll(); render(); openWalletEditor(wallet.id);
     }
     function setDebtFilter(filter) { debtFilter = filter; render(); }
     function renderAccount() {
       $("headerMonth").textContent = monthLabel(monthKey());
+      syncWallets();
+      renderWallets();
       syncBalanceForm();
       const remaining = monthlyDueCents();
       const totalOpen = state.reduce((sum,item) => sum + totals(item).remaining, 0);
@@ -524,7 +608,7 @@
       }
       lastProjectedCents = projected;
       $("accountEquation").textContent = current === null ? "Informe o saldo da conta para calcular."
-        : `${money(current)} em conta − ${money(remaining)} das parcelas deste mês = ${money(projected)} livres.`;
+        : `Receitas e gastos alteram este total. As ${wallets.length} contas abaixo são controladas manualmente.`;
       $("accountNote").textContent = projected === null ? "Salve seu saldo para ver quanto sobra ou falta."
         : projected < 0 ? `Faltam ${money(-projected)} para as parcelas deste mês. As futuras não foram descontadas.`
         : `Ao parcelar uma dívida, só ${monthLabel(monthKey())} é descontado agora. Cada parcela paga reduz o saldo em conta.`;
@@ -533,12 +617,18 @@
       const raw = $("accountInput").value.trim();
       const amount = raw.startsWith("-") ? -readValue(raw.slice(1)) : readValue(raw);
       if (!Number.isSafeInteger(amount)) { showToast("Informe um saldo válido, como 1.500,00."); $("accountInput").focus(); return; }
-      history.push({type:"account", previous:account ? {...account} : null});
+      syncWallets();
+      const wallet = wallets.find(item => item.id === editingWalletId) || wallets[0];
+      const name = $("accountNameInput").value.trim().slice(0,40) || wallet.name;
+      history.push({type:"wallet-state", previousAccount:account ? {...account} : null, previousWallets:wallets.map(item => ({...item})), previousSynced:walletSyncedTotal});
       if(history.length > 80) history.shift();
-      // O valor informado é o saldo de agora; pagamentos anteriores não são descontados outra vez.
-      account = {amount, paidAtEntry:paidCents(), expensesAtEntry:expenseTotalCents(), incomeAtEntry:receivedIncomeCents(), incomeIdsAtEntry:receivedIncomeIds()};
+      wallet.name = name;
+      wallet.amount = amount;
+      const total = wallets.reduce((sum,item) => sum + item.amount,0);
+      account = {amount:total, paidAtEntry:paidCents(), expensesAtEntry:expenseTotalCents(), incomeAtEntry:receivedIncomeCents(), incomeIdsAtEntry:receivedIncomeIds()};
+      walletSyncedTotal = total;
       const saved = saveAll(); render();
-      if(saved) { balanceFormOpen=false; syncBalanceForm(); $("editBalanceBtn").focus(); $("accountInput").value=""; showToast("Saldo atualizado. Os próximos pagamentos serão descontados dele."); }
+      if(saved) { balanceFormOpen=false; syncBalanceForm(); $("editBalanceBtn").focus(); $("accountNameInput").value=""; $("accountInput").value=""; showToast(`${name} atualizada. Total das contas: ${money(total)}.`); }
     }
     function loadState() {
       try {
@@ -557,7 +647,8 @@
     }
     function saveAll() {
       // Dívidas e saldo são gravados juntos para manter os valores consistentes.
-      try { localStorage.setItem(LEDGER_KEY, JSON.stringify({version:1, state, history, account, expenses, incomes})); }
+      syncWallets();
+      try { localStorage.setItem(LEDGER_KEY, JSON.stringify({version:1, state, history, account, expenses, incomes, wallets, walletSyncedTotal})); }
       catch (e) { showToast("Não foi possível salvar. Mantenha esta página aberta e tente novamente."); return false; }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -778,6 +869,13 @@
       const last = history.pop(); if (!last) return;
       const index = state.findIndex(item => item.id === last.id);
       if (last.type === "account") account = last.previous ? {...last.previous} : null;
+      else if (last.type === "wallet-state") {
+        account = last.previousAccount ? {...last.previousAccount} : null;
+        wallets = normalizeWallets(last.previousWallets || []);
+        if (!wallets.length) wallets = loadWalletSetup().wallets;
+        walletSyncedTotal = Number.isSafeInteger(last.previousSynced) ? last.previousSynced : accountCents();
+        editingWalletId = wallets[0].id;
+      }
       else if (last.type === "expense-add") expenses = expenses.filter(item => item.id !== last.id);
       else if (last.type === "expense-delete") {
         const restored = normalizeExpenses([last.item])[0];
@@ -797,9 +895,11 @@
     }
     function restoreAll() {
       if (!confirm("Restaurar a lista inicial? Isso remove dívidas adicionadas, parcelamentos e pagamentos registrados. O saldo atual da conta será mantido.")) return;
+      syncWallets();
       const currentAccount = accountCents();
       state = normalizeState(seed.map(item => ({...item, paid:false})));
       if (currentAccount !== null) account = {amount:currentAccount, paidAtEntry:0, expensesAtEntry:expenseTotalCents(), incomeAtEntry:receivedIncomeCents(), incomeIdsAtEntry:receivedIncomeIds()};
+      walletSyncedTotal = currentAccount;
       history=[]; expanded.clear(); const saved=saveAll(); render(); if(saved) showToast("Lista restaurada.");
     }
     function openModal(id = null) {
@@ -875,9 +975,10 @@
     $("filterOpen").addEventListener("click", () => setDebtFilter("open"));
     $("filterPaid").addEventListener("click", () => setDebtFilter("paid"));
     $("editBalanceBtn").addEventListener("click", () => {
-      balanceFormOpen = !balanceFormOpen; syncBalanceForm();
-      if (balanceFormOpen) $("accountInput").focus();
+      if (balanceFormOpen) { balanceFormOpen=false; syncBalanceForm(); }
+      else openWalletEditor(editingWalletId || wallets[0].id);
     });
+    $("addWalletBtn").addEventListener("click", addWallet);
     $("accountForm").addEventListener("submit", e => { e.preventDefault(); saveAccount(); });
     $("incomeForm").addEventListener("submit", e => { e.preventDefault(); addIncome(); });
     $("expenseForm").addEventListener("submit", e => { e.preventDefault(); addExpense(); });
@@ -912,8 +1013,8 @@
           await navigator.serviceWorker.register("./sw.js");
           await navigator.serviceWorker.ready;
           // Atualiza somente o HTML em cache, preservando os dados de dívidas.
-          const response = await fetch("./index.html?v=lista-excel-20260907", {cache:"no-store"});
-          if (!response.ok || !(await response.clone().text()).includes('data-app-version="lista-excel-3"')) return;
+          const response = await fetch("./index.html?v=multiplas-contas-total-20260907", {cache:"no-store"});
+          if (!response.ok || !(await response.clone().text()).includes('data-app-version="multiplas-contas-2"')) return;
           const cache = await caches.open("emprestimos-plus-v1");
           await cache.put(new URL("./", location.href), response.clone());
           await cache.put(new URL("./index.html", location.href), response);
